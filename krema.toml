@@ -1,0 +1,34 @@
+[package]
+name = "fangyu-code"
+version = "0.1.0"
+identifier = "com.fangyu.code"
+description = "Modern desktop AI coding assistant powered by Spring Boot and Krema"
+
+[window]
+title = "Fangyu Code"
+width = 1440
+height = 960
+min_width = 1120
+min_height = 720
+resizable = true
+fullscreen = false
+decorations = true
+
+[build]
+frontend_command = "npm run build"
+frontend_dev_command = "npm run dev"
+frontend_dev_url = "http://localhost:5173"
+out_dir = "dist"
+main_class = "com.fangyu.code.FangyuApplication"
+assets_path = "web"
+
+[bundle]
+identifier = "com.fangyu.code"
+copyright = "Copyright 2026 Fangyu Code"
+
+[permissions]
+allow = [
+  "clipboard:read",
+  "clipboard:write",
+  "notification"
+]

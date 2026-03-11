@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+.idea/
+.vscode/
+logs/
+exports/
+*.log
+*.db
+*.sqlite
+*.jar

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Krema Desktop Expert"
+  short_description: "构建和改造基于 Krema 的 Java 桌面应用"
+  default_prompt: "Use $krema-desktop-expert to design or implement a Krema-based desktop application."

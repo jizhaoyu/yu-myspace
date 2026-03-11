@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: fangyu-code
+  main:
+    web-application-type: none
+    banner-mode: off
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:sqlite:${FANGYU_DB_PATH:${user.home}/.fangyu-code/fangyu-code.db}
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  jackson:
+    serialization:
+      write-dates-as-timestamps: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  file:
+    name: logs/fangyu-code.log
+  level:
+    root: INFO
+    com.fangyu.code: INFO
+
+fangyu:
+  desktop:
+    title: Fangyu Code
+    version: 0.1.0
+    identifier: com.fangyu.code
+    dev-url: http://localhost:5173
+    prod-assets: /web
+  queue:
+    max-active-tasks: 1
+    default-priority: 50
+    insert-priority-bonus: 500
+    max-waiting-tasks: 200
+  context:
+    target-tokens: 12000
+    hard-limit-tokens: 24000
+    summary-max-characters: 1200
+  budgets:
+    session-usd: 12.5
+    weekly-usd: 60.0
+  engines:
+    default-engine: OPENAI_CODEX
+    claude:
+      enabled: true
+      executable: claude
+      working-directory: .
+      timeout-seconds: 900
+      input-cost-per-1k: 0.015
+      output-cost-per-1k: 0.075
+    codex:
+      enabled: true
+      endpoint: https://api.openai.com/v1/responses
+      model: gpt-5-codex
+      api-key: ${OPENAI_API_KEY:}
+      timeout-seconds: 900
+      input-cost-per-1k: 0.015
+      output-cost-per-1k: 0.06
+    gemini:
+      enabled: true
+      executable: gemini
+      working-directory: .
+      timeout-seconds: 900
+      input-cost-per-1k: 0.005
+      output-cost-per-1k: 0.015
+  sessions:
+    default-title: 新会话
