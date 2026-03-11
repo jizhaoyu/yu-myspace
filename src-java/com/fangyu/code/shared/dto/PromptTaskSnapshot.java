@@ -4,6 +4,8 @@ public record PromptTaskSnapshot(
     String id,
     String sessionId,
     String prompt,
+    String workspacePath,
+    java.util.List<String> contextFiles,
     String status,
     String engine,
     int priority,

@@ -23,6 +23,7 @@ public class PromptExecutionService {
     private final AiEngineRegistry engineRegistry;
     private final HistoryService historyService;
     private final ContextCompressionService contextCompressionService;
+    private final TaskContextAttachmentService taskContextAttachmentService;
     private final DualCodexTask dualCodexTask;
     private final Clock clock;
 
@@ -30,12 +31,14 @@ public class PromptExecutionService {
         AiEngineRegistry engineRegistry,
         HistoryService historyService,
         ContextCompressionService contextCompressionService,
+        TaskContextAttachmentService taskContextAttachmentService,
         DualCodexTask dualCodexTask,
         Clock clock
     ) {
         this.engineRegistry = engineRegistry;
         this.historyService = historyService;
         this.contextCompressionService = contextCompressionService;
+        this.taskContextAttachmentService = taskContextAttachmentService;
         this.dualCodexTask = dualCodexTask;
         this.clock = clock;
     }
@@ -64,6 +67,7 @@ public class PromptExecutionService {
 
         var messages = historyService.messages(task.sessionId());
         var context = contextCompressionService.buildWindow(messages);
+        String attachmentContext = taskContextAttachmentService.renderContextBlock(task.workspacePath(), task.contextFiles());
 
         if (task.dualMode()) {
             var result = dualCodexTask.execute(task, context, progressSink, chunkSink, supervisorSink, cancelled);
@@ -99,9 +103,16 @@ public class PromptExecutionService {
             Context window:
             %s
 
+            Workspace and attached files:
+            %s
+
             Latest user request:
             %s
-            """.formatted(context.renderForModel(), task.prompt());
+            """.formatted(
+            context.renderForModel(),
+            attachmentContext.isBlank() ? "[none]" : attachmentContext,
+            task.prompt()
+        );
 
         EngineExecutionResult result = engine.execute(
             new EngineExecutionRequest(

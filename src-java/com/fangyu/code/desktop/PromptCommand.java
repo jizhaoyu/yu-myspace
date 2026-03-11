@@ -6,7 +6,9 @@ import org.springframework.stereotype.Component;
 
 import com.fangyu.code.domain.model.AiEngineKind;
 import com.fangyu.code.domain.service.CostTrackerService;
+import com.fangyu.code.domain.service.DesktopFileDialogService;
 import com.fangyu.code.domain.service.DesktopAutostartService;
+import com.fangyu.code.domain.service.EngineConfigurationService;
 import com.fangyu.code.domain.service.HistoryService;
 import com.fangyu.code.domain.service.PromptQueueManager;
 import com.fangyu.code.domain.service.SettingsService;
@@ -15,7 +17,9 @@ import com.fangyu.code.shared.dto.BatchPromptRequest;
 import com.fangyu.code.shared.dto.BatchSubmitResult;
 import com.fangyu.code.shared.dto.BootstrapSnapshot;
 import com.fangyu.code.shared.dto.EditQueuedTaskRequest;
+import com.fangyu.code.shared.dto.EngineStatusSnapshot;
 import com.fangyu.code.shared.dto.HistorySearchResult;
+import com.fangyu.code.shared.dto.MoveQueuedTaskRequest;
 import com.fangyu.code.shared.dto.SubmitPromptRequest;
 
 import build.krema.core.KremaCommand;
@@ -28,6 +32,8 @@ public class PromptCommand {
     private final SettingsService settingsService;
     private final CostTrackerService costTrackerService;
     private final DesktopAutostartService autostartService;
+    private final DesktopFileDialogService fileDialogService;
+    private final EngineConfigurationService engineConfigurationService;
     private final DesktopEventPublisher eventPublisher;
 
     public PromptCommand(
@@ -36,6 +42,8 @@ public class PromptCommand {
         SettingsService settingsService,
         CostTrackerService costTrackerService,
         DesktopAutostartService autostartService,
+        DesktopFileDialogService fileDialogService,
+        EngineConfigurationService engineConfigurationService,
         DesktopEventPublisher eventPublisher
     ) {
         this.queueManager = queueManager;
@@ -43,6 +51,8 @@ public class PromptCommand {
         this.settingsService = settingsService;
         this.costTrackerService = costTrackerService;
         this.autostartService = autostartService;
+        this.fileDialogService = fileDialogService;
+        this.engineConfigurationService = engineConfigurationService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -57,7 +67,8 @@ public class PromptCommand {
             historyService.recentSessions(),
             queueManager.supervisors(),
             costTrackerService.snapshot(resolvedSessionId),
-            settingsService.load()
+            settingsService.load(),
+            engineConfigurationService.statuses()
         );
     }
 
@@ -74,6 +85,21 @@ public class PromptCommand {
     @KremaCommand
     public Object editQueuedTask(EditQueuedTaskRequest request) {
         return queueManager.editQueuedTask(request);
+    }
+
+    @KremaCommand
+    public Object retryTask(String taskId) {
+        return queueManager.retry(taskId);
+    }
+
+    @KremaCommand
+    public Object duplicateTask(String taskId) {
+        return queueManager.duplicate(taskId);
+    }
+
+    @KremaCommand
+    public Object moveQueuedTask(MoveQueuedTaskRequest request) {
+        return queueManager.moveQueuedTask(request);
     }
 
     @KremaCommand
@@ -107,12 +133,32 @@ public class PromptCommand {
     }
 
     @KremaCommand
+    public String chooseWorkspaceDirectory() {
+        return fileDialogService.chooseWorkspaceDirectory();
+    }
+
+    @KremaCommand
+    public List<String> chooseContextFiles() {
+        return fileDialogService.chooseContextFiles();
+    }
+
+    @KremaCommand
+    public List<EngineStatusSnapshot> engineStatuses() {
+        return engineConfigurationService.statuses();
+    }
+
+    @KremaCommand
     public AppSettings updateSettings(
         String theme,
         String defaultEngine,
         boolean autostartEnabled,
         Double sessionBudgetUsd,
-        Double weeklyBudgetUsd
+        Double weeklyBudgetUsd,
+        String claudeExecutable,
+        String geminiExecutable,
+        String codexEndpoint,
+        String codexModel,
+        String codexApiKey
     ) {
         AppSettings current = settingsService.load();
         AppSettings next = new AppSettings(
@@ -120,7 +166,12 @@ public class PromptCommand {
             defaultEngine == null || defaultEngine.isBlank() ? current.defaultEngine() : AiEngineKind.from(defaultEngine).name(),
             autostartEnabled,
             sessionBudgetUsd == null ? current.sessionBudgetUsd() : sessionBudgetUsd,
-            weeklyBudgetUsd == null ? current.weeklyBudgetUsd() : weeklyBudgetUsd
+            weeklyBudgetUsd == null ? current.weeklyBudgetUsd() : weeklyBudgetUsd,
+            claudeExecutable == null ? current.claudeExecutable() : claudeExecutable,
+            geminiExecutable == null ? current.geminiExecutable() : geminiExecutable,
+            codexEndpoint == null ? current.codexEndpoint() : codexEndpoint,
+            codexModel == null ? current.codexModel() : codexModel,
+            codexApiKey == null ? current.codexApiKey() : codexApiKey
         );
         AppSettings updated = settingsService.update(next);
         autostartService.apply(updated.autostartEnabled());

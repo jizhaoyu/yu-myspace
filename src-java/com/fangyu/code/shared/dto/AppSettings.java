@@ -5,5 +5,10 @@ public record AppSettings(
     String defaultEngine,
     boolean autostartEnabled,
     double sessionBudgetUsd,
-    double weeklyBudgetUsd
+    double weeklyBudgetUsd,
+    String claudeExecutable,
+    String geminiExecutable,
+    String codexEndpoint,
+    String codexModel,
+    String codexApiKey
 ) {}

@@ -50,8 +50,11 @@ export default function App() {
   const streamingByTask = useAppStore((state) => state.streamingByTask);
   const budget = useAppStore((state) => state.budget);
   const settings = useAppStore((state) => state.settings);
+  const engineStatuses = useAppStore((state) => state.engineStatuses);
   const searchResult = useAppStore((state) => state.searchResult);
   const composerDraft = useAppStore((state) => state.composerDraft);
+  const composerWorkspacePath = useAppStore((state) => state.composerWorkspacePath);
+  const composerContextFiles = useAppStore((state) => state.composerContextFiles);
   const batchMode = useAppStore((state) => state.batchMode);
   const insertMode = useAppStore((state) => state.insertMode);
   const dualMode = useAppStore((state) => state.dualMode);
@@ -60,6 +63,8 @@ export default function App() {
   const hydrate = useAppStore((state) => state.hydrate);
   const setSessionId = useAppStore((state) => state.setSessionId);
   const setComposerDraft = useAppStore((state) => state.setComposerDraft);
+  const setComposerWorkspacePath = useAppStore((state) => state.setComposerWorkspacePath);
+  const setComposerContextFiles = useAppStore((state) => state.setComposerContextFiles);
   const setBatchMode = useAppStore((state) => state.setBatchMode);
   const setInsertMode = useAppStore((state) => state.setInsertMode);
   const setDualMode = useAppStore((state) => state.setDualMode);
@@ -69,12 +74,18 @@ export default function App() {
   const applySupervisor = useAppStore((state) => state.applySupervisor);
   const applyBudget = useAppStore((state) => state.applyBudget);
   const applySettings = useAppStore((state) => state.applySettings);
+  const setEngineStatuses = useAppStore((state) => state.setEngineStatuses);
   const applyHistoryMessage = useAppStore((state) => state.applyHistoryMessage);
   const setSearchResult = useAppStore((state) => state.setSearchResult);
 
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap", requestedSessionId ?? "active"],
     queryFn: () => desktopApi.bootstrapState(requestedSessionId),
+  });
+
+  const engineStatusQuery = useQuery({
+    queryKey: ["engine-statuses"],
+    queryFn: () => desktopApi.engineStatuses(),
   });
 
   useEffect(() => {
@@ -86,6 +97,36 @@ export default function App() {
       hydrate(bootstrapQuery.data);
     });
   }, [bootstrapQuery.data, hydrate]);
+
+  useEffect(() => {
+    if (engineStatusQuery.data) {
+      setEngineStatuses(engineStatusQuery.data);
+    }
+  }, [engineStatusQuery.data, setEngineStatuses]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const root = document.documentElement;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = () => {
+      const preferredTheme = settings.theme === "light" || settings.theme === "dark"
+        ? settings.theme
+        : mediaQuery.matches
+          ? "dark"
+          : "light";
+
+      root.dataset.theme = preferredTheme;
+      root.style.colorScheme = preferredTheme;
+    };
+
+    applyTheme();
+    mediaQuery.addEventListener("change", applyTheme);
+    return () => mediaQuery.removeEventListener("change", applyTheme);
+  }, [settings.theme]);
 
   useEffect(() => {
     const unsubscribers = [
@@ -164,6 +205,8 @@ export default function App() {
       setRequestedSessionId(task.sessionId);
       setSessionId(task.sessionId);
       setComposerDraft("");
+      setComposerWorkspacePath(null);
+      setComposerContextFiles([]);
       setEditingTaskId(null);
       await refreshQueueSnapshot();
       await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
@@ -179,6 +222,8 @@ export default function App() {
     onSuccess: async (result, variables) => {
       applyQueueSnapshot(result.queue);
       setComposerDraft("");
+      setComposerWorkspacePath(null);
+      setComposerContextFiles([]);
       setRequestedSessionId(result.sessionId);
       setSessionId(result.sessionId);
       await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
@@ -206,6 +251,32 @@ export default function App() {
     },
   });
 
+  const { mutateAsync: chooseWorkspaceDirectory, isPending: chooseWorkspacePending } = useMutation({
+    mutationFn: desktopApi.chooseWorkspaceDirectory,
+    onSuccess: (workspacePath) => {
+      if (workspacePath) {
+        setComposerWorkspacePath(workspacePath);
+        setNotice({ tone: "info", text: `已绑定项目目录：${workspacePath}` });
+      }
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutateAsync: chooseContextFiles, isPending: chooseContextFilesPending } = useMutation({
+    mutationFn: desktopApi.chooseContextFiles,
+    onSuccess: (contextFiles) => {
+      if (contextFiles.length) {
+        setComposerContextFiles(contextFiles);
+        setNotice({ tone: "info", text: `已附加 ${contextFiles.length} 个上下文文件。` });
+      }
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
   const { mutate: cancelTask, isPending: cancelPending } = useMutation({
     mutationFn: desktopApi.cancelTask,
     onSuccess: async (task) => {
@@ -214,6 +285,43 @@ export default function App() {
       }
       await refreshQueueSnapshot();
       setNotice({ tone: "success", text: `任务 ${task.id.slice(0, 8)} 已取消。` });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: retryTask, isPending: retryPending } = useMutation({
+    mutationFn: desktopApi.retryTask,
+    onSuccess: async (task) => {
+      setRequestedSessionId(task.sessionId);
+      setSessionId(task.sessionId);
+      await refreshQueueSnapshot();
+      setNotice({ tone: "success", text: `已重试任务 ${task.id.slice(0, 8)}。` });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: duplicateTask, isPending: duplicatePending } = useMutation({
+    mutationFn: desktopApi.duplicateTask,
+    onSuccess: async (task) => {
+      setRequestedSessionId(task.sessionId);
+      setSessionId(task.sessionId);
+      await refreshQueueSnapshot();
+      setNotice({ tone: "success", text: `已复制任务 ${task.id.slice(0, 8)}。` });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: moveQueuedTask, isPending: movePending } = useMutation({
+    mutationFn: desktopApi.moveQueuedTask,
+    onSuccess: (snapshot) => {
+      applyQueueSnapshot(snapshot);
+      setNotice({ tone: "info", text: "排队顺序已更新。" });
     },
     onError: (error) => {
       setNotice({ tone: "danger", text: getErrorMessage(error) });
@@ -238,6 +346,7 @@ export default function App() {
     mutationFn: (payload: AppSettings) => desktopApi.updateSettings(payload),
     onSuccess: (nextSettings) => {
       applySettings(nextSettings);
+      void queryClient.invalidateQueries({ queryKey: ["engine-statuses"] });
       setNotice({ tone: "success", text: "全局设置已同步到桌面端。" });
     },
     onError: (error) => {
@@ -267,6 +376,8 @@ export default function App() {
   function resetComposerEditingState() {
     setEditingTaskId(null);
     setComposerDraft("");
+    setComposerWorkspacePath(null);
+    setComposerContextFiles([]);
     setBatchMode(false);
     setInsertMode(false);
     setDualMode(false);
@@ -294,6 +405,8 @@ export default function App() {
   function handleEditTask(task: PromptTaskSnapshot) {
     setEditingTaskId(task.id);
     setComposerDraft(task.prompt);
+    setComposerWorkspacePath(task.workspacePath);
+    setComposerContextFiles(task.contextFiles);
     setBatchMode(false);
     setInsertMode(task.insertMode);
     setDualMode(task.dualMode);
@@ -334,10 +447,12 @@ export default function App() {
           budget={budget}
           queue={queue}
           settings={settings}
+          engineStatuses={engineStatuses}
           bootstrapPending={bootstrapQuery.isPending}
           queuePending={queuePending}
           exportPending={exportPending}
           settingsPending={settingsPending}
+          engineStatusPending={engineStatusQuery.isPending || engineStatusQuery.isFetching}
           notice={notice}
           onToggleQueue={() => toggleQueue()}
           onExportSession={() => {
@@ -346,6 +461,9 @@ export default function App() {
             }
           }}
           onSaveSettings={(payload) => saveSettings(payload)}
+          onRefreshEngineStatuses={() => {
+            void engineStatusQuery.refetch();
+          }}
         />
 
         <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_380px]">
@@ -373,8 +491,11 @@ export default function App() {
               activeTaskId={activeTaskId}
               progressByTask={progressByTask}
               onEditTask={handleEditTask}
+              onRetryTask={retryTask}
+              onDuplicateTask={duplicateTask}
+              onMoveTask={(taskId, direction) => moveQueuedTask({ taskId, direction })}
               onCancelTask={cancelTask}
-              cancelPending={cancelPending}
+              actionPending={cancelPending || retryPending || duplicatePending || movePending}
             />
           </div>
 
@@ -383,6 +504,8 @@ export default function App() {
               sessionId={sessionId}
               settings={settings}
               draft={composerDraft}
+              workspacePath={composerWorkspacePath}
+              contextFiles={composerContextFiles}
               batchMode={batchMode}
               insertMode={insertMode}
               dualMode={dualMode}
@@ -392,8 +515,14 @@ export default function App() {
               }
               onDraftChange={setComposerDraft}
               onBatchModeChange={setBatchMode}
+              onWorkspacePathChange={setComposerWorkspacePath}
+              onContextFilesChange={setComposerContextFiles}
               onInsertModeChange={setInsertMode}
               onDualModeChange={setDualMode}
+              onChooseWorkspace={() => chooseWorkspaceDirectory()}
+              onChooseContextFiles={() => chooseContextFiles()}
+              chooseWorkspacePending={chooseWorkspacePending}
+              chooseContextFilesPending={chooseContextFilesPending}
               onSubmitPrompt={submitPrompt}
               onSubmitBatch={submitBatch}
               onEditQueuedTask={editQueuedTask}

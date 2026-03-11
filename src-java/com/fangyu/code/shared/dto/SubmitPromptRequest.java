@@ -6,5 +6,7 @@ public record SubmitPromptRequest(
     String engine,
     Integer priority,
     boolean insertMode,
-    boolean dualMode
+    boolean dualMode,
+    String workspacePath,
+    java.util.List<String> contextFiles
 ) {}

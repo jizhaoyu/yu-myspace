@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fangyu.code.config.FangyuProperties;
 import com.fangyu.code.domain.model.AiEngineKind;
 import com.fangyu.code.domain.service.CostTrackerService;
+import com.fangyu.code.domain.service.EngineConfigurationService;
 import com.fangyu.code.domain.service.TokenEstimator;
 
 @Component
@@ -27,17 +28,20 @@ public class CodexEngine implements AiEngine {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final Clock clock;
+    private final EngineConfigurationService engineConfigurationService;
 
     public CodexEngine(
         FangyuProperties properties,
         CostTrackerService costTrackerService,
         TokenEstimator tokenEstimator,
+        EngineConfigurationService engineConfigurationService,
         ObjectMapper objectMapper,
         Clock clock
     ) {
         this.properties = properties;
         this.costTrackerService = costTrackerService;
         this.tokenEstimator = tokenEstimator;
+        this.engineConfigurationService = engineConfigurationService;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.httpClient = HttpClient.newBuilder()
@@ -54,10 +58,12 @@ public class CodexEngine implements AiEngine {
     public boolean isAvailable() {
         FangyuProperties.CodexEngine settings = properties.getEngines().getCodex();
         return settings.isEnabled()
-            && settings.getEndpoint() != null
-            && !settings.getEndpoint().isBlank()
-            && settings.getApiKey() != null
-            && !settings.getApiKey().isBlank();
+            && engineConfigurationService.codexEndpoint() != null
+            && !engineConfigurationService.codexEndpoint().isBlank()
+            && engineConfigurationService.codexModel() != null
+            && !engineConfigurationService.codexModel().isBlank()
+            && engineConfigurationService.codexApiKey() != null
+            && !engineConfigurationService.codexApiKey().isBlank();
     }
 
     @Override
@@ -70,13 +76,13 @@ public class CodexEngine implements AiEngine {
         observer.onStage("building-request", 0.15d, "Preparing Codex API call");
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", properties.getEngines().getCodex().getModel());
+        body.put("model", engineConfigurationService.codexModel());
         body.put("input", request.asModelInput());
         body.put("stream", false);
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
-            .uri(URI.create(properties.getEngines().getCodex().getEndpoint()))
-            .header("Authorization", "Bearer " + properties.getEngines().getCodex().getApiKey())
+            .uri(URI.create(engineConfigurationService.codexEndpoint()))
+            .header("Authorization", "Bearer " + engineConfigurationService.codexApiKey())
             .header("Content-Type", "application/json")
             .timeout(request.timeout())
             .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))

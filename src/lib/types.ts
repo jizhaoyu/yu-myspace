@@ -13,6 +13,19 @@ export interface AppSettings {
   autostartEnabled: boolean;
   sessionBudgetUsd: number;
   weeklyBudgetUsd: number;
+  claudeExecutable: string;
+  geminiExecutable: string;
+  codexEndpoint: string;
+  codexModel: string;
+  codexApiKey: string;
+}
+
+export interface EngineStatusSnapshot {
+  engine: EngineKind | string;
+  enabled: boolean;
+  configured: boolean;
+  available: boolean;
+  detail: string;
 }
 
 export interface BatchPromptRequest {
@@ -21,6 +34,8 @@ export interface BatchPromptRequest {
   engine: string;
   priority: number | null;
   insertMode: boolean;
+  workspacePath: string | null;
+  contextFiles: string[];
 }
 
 export interface BatchSubmitResult {
@@ -52,6 +67,13 @@ export interface EditQueuedTaskRequest {
   prompt: string;
   priority: number | null;
   insertMode: boolean;
+  workspacePath: string | null;
+  contextFiles: string[];
+}
+
+export interface MoveQueuedTaskRequest {
+  taskId: string;
+  direction: "UP" | "DOWN";
 }
 
 export interface HistoryHit {
@@ -83,6 +105,8 @@ export interface PromptTaskSnapshot {
   id: string;
   sessionId: string;
   prompt: string;
+  workspacePath: string | null;
+  contextFiles: string[];
   status: TaskStatus | string;
   engine: string;
   priority: number;
@@ -117,6 +141,8 @@ export interface SubmitPromptRequest {
   priority: number | null;
   insertMode: boolean;
   dualMode: boolean;
+  workspacePath: string | null;
+  contextFiles: string[];
 }
 
 export interface SupervisorSnapshot {
@@ -162,6 +188,7 @@ export interface BootstrapSnapshot {
   supervisors: SupervisorSnapshot[];
   budget: BudgetSnapshot;
   settings: AppSettings;
+  engineStatuses: EngineStatusSnapshot[];
 }
 
 export const EMPTY_SETTINGS: AppSettings = {
@@ -170,6 +197,11 @@ export const EMPTY_SETTINGS: AppSettings = {
   autostartEnabled: false,
   sessionBudgetUsd: 12.5,
   weeklyBudgetUsd: 60,
+  claudeExecutable: "claude",
+  geminiExecutable: "gemini",
+  codexEndpoint: "https://api.openai.com/v1/responses",
+  codexModel: "gpt-5-codex",
+  codexApiKey: "",
 };
 
 export const EMPTY_BUDGET: BudgetSnapshot = {
@@ -202,4 +234,5 @@ export const EMPTY_BOOTSTRAP: BootstrapSnapshot = {
   supervisors: [],
   budget: EMPTY_BUDGET,
   settings: EMPTY_SETTINGS,
+  engineStatuses: [],
 };

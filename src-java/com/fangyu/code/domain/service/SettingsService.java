@@ -43,7 +43,20 @@ public class SettingsService {
         }
 
         try {
-            return objectMapper.readValue(json, AppSettings.class);
+            AppSettings loaded = objectMapper.readValue(json, AppSettings.class);
+            AppSettings defaults = defaults();
+            return new AppSettings(
+                loaded.theme() == null ? defaults.theme() : loaded.theme(),
+                loaded.defaultEngine() == null ? defaults.defaultEngine() : loaded.defaultEngine(),
+                loaded.autostartEnabled(),
+                loaded.sessionBudgetUsd(),
+                loaded.weeklyBudgetUsd(),
+                loaded.claudeExecutable() == null ? defaults.claudeExecutable() : loaded.claudeExecutable(),
+                loaded.geminiExecutable() == null ? defaults.geminiExecutable() : loaded.geminiExecutable(),
+                loaded.codexEndpoint() == null ? defaults.codexEndpoint() : loaded.codexEndpoint(),
+                loaded.codexModel() == null ? defaults.codexModel() : loaded.codexModel(),
+                loaded.codexApiKey() == null ? defaults.codexApiKey() : loaded.codexApiKey()
+            );
         } catch (Exception exception) {
             return defaults();
         }
@@ -75,7 +88,12 @@ public class SettingsService {
             properties.getEngines().getDefaultEngine().name(),
             false,
             properties.getBudgets().getSessionUsd(),
-            properties.getBudgets().getWeeklyUsd()
+            properties.getBudgets().getWeeklyUsd(),
+            properties.getEngines().getClaude().getExecutable(),
+            properties.getEngines().getGemini().getExecutable(),
+            properties.getEngines().getCodex().getEndpoint(),
+            properties.getEngines().getCodex().getModel(),
+            properties.getEngines().getCodex().getApiKey()
         );
     }
 }

@@ -10,5 +10,6 @@ public record BootstrapSnapshot(
     List<ConversationSessionView> sessions,
     List<SupervisorSnapshot> supervisors,
     BudgetSnapshot budget,
-    AppSettings settings
+    AppSettings settings,
+    List<EngineStatusSnapshot> engineStatuses
 ) {}

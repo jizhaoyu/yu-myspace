@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Layers3, PencilLine, Send, Split, Wand2 } from "lucide-react";
+import { FileStack, FolderSearch, Layers3, PencilLine, Send, Split, Wand2, X } from "lucide-react";
 
 import { Badge, Button, FieldLabel, Input, Panel, Textarea, Toggle } from "@/components/ui";
 import {
@@ -15,15 +15,23 @@ type PromptComposerProps = {
   sessionId: string;
   settings: AppSettings;
   draft: string;
+  workspacePath: string | null;
+  contextFiles: string[];
   batchMode: boolean;
   insertMode: boolean;
   dualMode: boolean;
   editingTask: PromptTaskSnapshot | null;
   submitPending: boolean;
   onDraftChange: (value: string) => void;
+  onWorkspacePathChange: (value: string | null) => void;
+  onContextFilesChange: (value: string[]) => void;
   onBatchModeChange: (value: boolean) => void;
   onInsertModeChange: (value: boolean) => void;
   onDualModeChange: (value: boolean) => void;
+  onChooseWorkspace: () => void;
+  onChooseContextFiles: () => void;
+  chooseWorkspacePending: boolean;
+  chooseContextFilesPending: boolean;
   onSubmitPrompt: (payload: SubmitPromptRequest) => void;
   onSubmitBatch: (payload: BatchPromptRequest) => void;
   onEditQueuedTask: (payload: EditQueuedTaskRequest) => void;
@@ -43,15 +51,23 @@ export function PromptComposer({
   sessionId,
   settings,
   draft,
+  workspacePath,
+  contextFiles,
   batchMode,
   insertMode,
   dualMode,
   editingTask,
   submitPending,
   onDraftChange,
+  onWorkspacePathChange,
+  onContextFilesChange,
   onBatchModeChange,
   onInsertModeChange,
   onDualModeChange,
+  onChooseWorkspace,
+  onChooseContextFiles,
+  chooseWorkspacePending,
+  chooseContextFilesPending,
   onSubmitPrompt,
   onSubmitBatch,
   onEditQueuedTask,
@@ -98,6 +114,8 @@ export function PromptComposer({
               prompt: draft.trim(),
               priority: parseOptionalNumber(priority),
               insertMode,
+              workspacePath,
+              contextFiles,
             });
             return;
           }
@@ -113,6 +131,8 @@ export function PromptComposer({
               engine,
               priority: parseOptionalNumber(priority),
               insertMode,
+              workspacePath,
+              contextFiles,
             });
             return;
           }
@@ -124,6 +144,8 @@ export function PromptComposer({
             priority: parseOptionalNumber(priority),
             insertMode,
             dualMode,
+            workspacePath,
+            contextFiles,
           });
         }}
       >
@@ -179,6 +201,65 @@ export function PromptComposer({
           />
         </div>
 
+        <div className="grid gap-3 rounded-[24px] border border-white/8 bg-slate-950/38 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium text-slate-100">项目与文件上下文</div>
+              <div className="text-xs text-slate-400">选择工作区目录，并附加本次任务需要参考的文件。</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="ghost" loading={chooseWorkspacePending} onClick={onChooseWorkspace}>
+                <FolderSearch className="size-3.5" />
+                选择项目
+              </Button>
+              <Button type="button" size="sm" variant="ghost" loading={chooseContextFilesPending} onClick={onChooseContextFiles}>
+                <FileStack className="size-3.5" />
+                附加文件
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
+              <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">Workspace</div>
+              <div className="flex items-start justify-between gap-2">
+                <p className="break-all text-sm leading-6 text-slate-200">{workspacePath || "未选择项目目录"}</p>
+                {workspacePath ? (
+                  <button
+                    type="button"
+                    className="rounded-full p-1 text-slate-400 transition hover:bg-white/8 hover:text-slate-100"
+                    onClick={() => onWorkspacePathChange(null)}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
+              <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">Attached Files</div>
+              {contextFiles.length ? (
+                <div className="space-y-2">
+                  {contextFiles.map((filePath) => (
+                    <div key={filePath} className="flex items-start justify-between gap-2 rounded-xl bg-slate-950/45 px-3 py-2 text-xs text-slate-300">
+                      <span className="break-all">{filePath}</span>
+                      <button
+                        type="button"
+                        className="rounded-full p-1 text-slate-500 transition hover:bg-white/8 hover:text-slate-100"
+                        onClick={() => onContextFilesChange(contextFiles.filter((item) => item !== filePath))}
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-slate-400">未附加上下文文件</div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-[24px] border border-white/8 bg-slate-950/38 p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
             <div className="flex items-center gap-2">
@@ -192,6 +273,7 @@ export function PromptComposer({
             <div className="flex items-center gap-3">
               <span>{promptCount} 条任务</span>
               <span>{draft.trim().length} chars</span>
+              <span>{contextFiles.length} files</span>
             </div>
           </div>
           <Textarea
@@ -222,6 +304,8 @@ export function PromptComposer({
             <div>Priority {priority || "null"}</div>
             <div>Insert {insertMode ? "ON" : "OFF"}</div>
             <div>Dual {dualMode && !batchMode && !editingTask ? "ON" : "OFF"}</div>
+            <div>Workspace {workspacePath || "none"}</div>
+            <div>Files {contextFiles.length}</div>
           </div>
         </div>
 

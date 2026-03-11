@@ -7,5 +7,7 @@ public record BatchPromptRequest(
     List<String> prompts,
     String engine,
     Integer priority,
-    boolean insertMode
+    boolean insertMode,
+    String workspacePath,
+    List<String> contextFiles
 ) {}

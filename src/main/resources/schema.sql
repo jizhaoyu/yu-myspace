@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS prompt_task (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     prompt TEXT NOT NULL,
+    workspace_path TEXT,
+    context_files_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL,
     engine TEXT NOT NULL,
     priority INTEGER NOT NULL,

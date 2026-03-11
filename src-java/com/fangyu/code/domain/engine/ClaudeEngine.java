@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import com.fangyu.code.config.FangyuProperties;
 import com.fangyu.code.domain.model.AiEngineKind;
+import com.fangyu.code.domain.service.EngineConfigurationService;
 import com.fangyu.code.domain.service.CostTrackerService;
 import com.fangyu.code.domain.service.TokenEstimator;
 
@@ -14,16 +15,19 @@ public class ClaudeEngine extends AbstractCliAiEngine {
 
     private final FangyuProperties properties;
     private final CostTrackerService costTrackerService;
+    private final EngineConfigurationService engineConfigurationService;
 
     public ClaudeEngine(
         FangyuProperties properties,
         CostTrackerService costTrackerService,
+        EngineConfigurationService engineConfigurationService,
         TokenEstimator tokenEstimator,
         Clock clock
     ) {
         super(tokenEstimator, clock);
         this.properties = properties;
         this.costTrackerService = costTrackerService;
+        this.engineConfigurationService = engineConfigurationService;
     }
 
     @Override
@@ -33,7 +37,14 @@ public class ClaudeEngine extends AbstractCliAiEngine {
 
     @Override
     protected FangyuProperties.CliEngine settings() {
-        return properties.getEngines().getClaude();
+        FangyuProperties.CliEngine settings = new FangyuProperties.CliEngine();
+        settings.setEnabled(properties.getEngines().getClaude().isEnabled());
+        settings.setTimeoutSeconds(properties.getEngines().getClaude().getTimeoutSeconds());
+        settings.setInputCostPer1k(properties.getEngines().getClaude().getInputCostPer1k());
+        settings.setOutputCostPer1k(properties.getEngines().getClaude().getOutputCostPer1k());
+        settings.setWorkingDirectory(properties.getEngines().getClaude().getWorkingDirectory());
+        settings.setExecutable(engineConfigurationService.claudeExecutable());
+        return settings;
     }
 
     @Override

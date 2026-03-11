@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import {
   Bot,
   Download,
+  KeyRound,
   Pause,
   Play,
+  RefreshCcw,
   Settings2,
+  TerminalSquare,
+  Unplug,
   Wallet,
   Zap,
 } from "lucide-react";
 
 import { Badge, Button, FieldLabel, Input, Panel, ProgressBar, Toggle } from "@/components/ui";
-import { type AppSettings, type BudgetSnapshot, type QueueSnapshot } from "@/lib/types";
+import { type AppSettings, type BudgetSnapshot, type EngineStatusSnapshot, type QueueSnapshot } from "@/lib/types";
 import { clampPercent, currency, engineLabel } from "@/lib/utils";
 
 const ENGINE_OPTIONS = ["OPENAI_CODEX", "CLAUDE_CODE", "GEMINI"] as const;
@@ -26,14 +30,17 @@ type BudgetHeaderProps = {
   budget: BudgetSnapshot;
   queue: QueueSnapshot;
   settings: AppSettings;
+  engineStatuses: EngineStatusSnapshot[];
   bootstrapPending: boolean;
   queuePending: boolean;
   exportPending: boolean;
   settingsPending: boolean;
+  engineStatusPending: boolean;
   notice: Notice | null;
   onToggleQueue: () => void;
   onExportSession: () => void;
   onSaveSettings: (payload: AppSettings) => void;
+  onRefreshEngineStatuses: () => void;
 };
 
 function levelTone(level: string) {
@@ -52,14 +59,17 @@ export function BudgetHeader({
   budget,
   queue,
   settings,
+  engineStatuses,
   bootstrapPending,
   queuePending,
   exportPending,
   settingsPending,
+  engineStatusPending,
   notice,
   onToggleQueue,
   onExportSession,
   onSaveSettings,
+  onRefreshEngineStatuses,
 }: BudgetHeaderProps) {
   const [draft, setDraft] = useState({
     theme: settings.theme,
@@ -67,6 +77,11 @@ export function BudgetHeader({
     autostartEnabled: settings.autostartEnabled,
     sessionBudgetUsd: String(settings.sessionBudgetUsd),
     weeklyBudgetUsd: String(settings.weeklyBudgetUsd),
+    claudeExecutable: settings.claudeExecutable,
+    geminiExecutable: settings.geminiExecutable,
+    codexEndpoint: settings.codexEndpoint,
+    codexModel: settings.codexModel,
+    codexApiKey: settings.codexApiKey,
   });
 
   useEffect(() => {
@@ -76,10 +91,20 @@ export function BudgetHeader({
       autostartEnabled: settings.autostartEnabled,
       sessionBudgetUsd: String(settings.sessionBudgetUsd),
       weeklyBudgetUsd: String(settings.weeklyBudgetUsd),
+      claudeExecutable: settings.claudeExecutable,
+      geminiExecutable: settings.geminiExecutable,
+      codexEndpoint: settings.codexEndpoint,
+      codexModel: settings.codexModel,
+      codexApiKey: settings.codexApiKey,
     });
   }, [
     settings.autostartEnabled,
+    settings.claudeExecutable,
+    settings.codexApiKey,
+    settings.codexEndpoint,
+    settings.codexModel,
     settings.defaultEngine,
+    settings.geminiExecutable,
     settings.sessionBudgetUsd,
     settings.theme,
     settings.weeklyBudgetUsd,
@@ -87,6 +112,16 @@ export function BudgetHeader({
 
   const sessionUsage = clampPercent(budget.sessionUsageRatio);
   const weeklyUsage = clampPercent(budget.weeklyUsageRatio);
+
+  function statusTone(status: EngineStatusSnapshot) {
+    if (status.available) {
+      return "success" as const;
+    }
+    if (!status.enabled) {
+      return "neutral" as const;
+    }
+    return "warning" as const;
+  }
 
   return (
     <Panel
@@ -305,6 +340,108 @@ export function BudgetHeader({
                 }
               />
             </div>
+            <div>
+              <FieldLabel>Claude CLI</FieldLabel>
+              <Input
+                value={draft.claudeExecutable}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    claudeExecutable: event.target.value,
+                  }))
+                }
+                placeholder="claude"
+              />
+            </div>
+            <div>
+              <FieldLabel>Gemini CLI</FieldLabel>
+              <Input
+                value={draft.geminiExecutable}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    geminiExecutable: event.target.value,
+                  }))
+                }
+                placeholder="gemini"
+              />
+            </div>
+            <div>
+              <FieldLabel>Codex Endpoint</FieldLabel>
+              <Input
+                value={draft.codexEndpoint}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    codexEndpoint: event.target.value,
+                  }))
+                }
+                placeholder="https://api.openai.com/v1/responses"
+              />
+            </div>
+            <div>
+              <FieldLabel>Codex Model</FieldLabel>
+              <Input
+                value={draft.codexModel}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    codexModel: event.target.value,
+                  }))
+                }
+                placeholder="gpt-5-codex"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <FieldLabel>Codex API Key</FieldLabel>
+              <Input
+                type="password"
+                value={draft.codexApiKey}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    codexApiKey: event.target.value,
+                  }))
+                }
+                placeholder="sk-..."
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-[24px] border border-white/8 bg-slate-950/36 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-white">引擎健康检查</div>
+                <div className="text-xs text-slate-400">检查 CLI 是否可执行，以及 Codex API 是否完成必要配置。</div>
+              </div>
+              <Button type="button" size="sm" variant="ghost" loading={engineStatusPending} onClick={onRefreshEngineStatuses}>
+                <RefreshCcw className="size-3.5" />
+                刷新状态
+              </Button>
+            </div>
+            <div className="grid gap-3">
+              {engineStatuses.map((status) => (
+                <div key={status.engine} className="rounded-2xl border border-white/8 bg-white/4 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
+                      {status.engine === "OPENAI_CODEX" ? (
+                        <KeyRound className="size-4 text-amber-300" />
+                      ) : status.available ? (
+                        <TerminalSquare className="size-4 text-emerald-300" />
+                      ) : (
+                        <Unplug className="size-4 text-yellow-300" />
+                      )}
+                      {engineLabel(status.engine)}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge tone={statusTone(status)}>{status.available ? "Ready" : "Attention"}</Badge>
+                      <Badge tone={status.configured ? "info" : "warning"}>{status.configured ? "Configured" : "Incomplete"}</Badge>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-400">{status.detail}</div>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="mt-3">
             <Toggle
@@ -336,6 +473,11 @@ export function BudgetHeader({
                   weeklyBudgetUsd: Number.isFinite(weeklyBudget)
                     ? weeklyBudget
                     : settings.weeklyBudgetUsd,
+                  claudeExecutable: draft.claudeExecutable,
+                  geminiExecutable: draft.geminiExecutable,
+                  codexEndpoint: draft.codexEndpoint,
+                  codexModel: draft.codexModel,
+                  codexApiKey: draft.codexApiKey,
                 });
               }}
             >

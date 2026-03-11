@@ -4,5 +4,7 @@ public record EditQueuedTaskRequest(
     String taskId,
     String prompt,
     Integer priority,
-    boolean insertMode
+    boolean insertMode,
+    String workspacePath,
+    java.util.List<String> contextFiles
 ) {}

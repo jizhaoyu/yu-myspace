@@ -8,6 +8,8 @@ public record PromptTaskEntity(
     @Id String id,
     String sessionId,
     String prompt,
+    String workspacePath,
+    String contextFilesJson,
     String status,
     String engine,
     int priority,

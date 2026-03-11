@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Pencil, Slash, TimerReset } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Pencil, RotateCcw, Slash, TimerReset } from "lucide-react";
 
 import { Badge, Button, Panel, ProgressBar } from "@/components/ui";
 import { type PromptTaskSnapshot, type QueueSnapshot, type TaskProgressEvent } from "@/lib/types";
@@ -17,8 +17,11 @@ type QueuePanelProps = {
   activeTaskId: string | null;
   progressByTask: Record<string, TaskProgressEvent>;
   onEditTask: (task: PromptTaskSnapshot) => void;
+  onRetryTask: (taskId: string) => void;
+  onDuplicateTask: (taskId: string) => void;
+  onMoveTask: (taskId: string, direction: "UP" | "DOWN") => void;
   onCancelTask: (taskId: string) => void;
-  cancelPending: boolean;
+  actionPending: boolean;
 };
 
 function statusTone(status: string) {
@@ -42,8 +45,11 @@ export function QueuePanel({
   activeTaskId,
   progressByTask,
   onEditTask,
+  onRetryTask,
+  onDuplicateTask,
+  onMoveTask,
   onCancelTask,
-  cancelPending,
+  actionPending,
 }: QueuePanelProps) {
   const tasks = [...queue.tasks].sort((left, right) => {
     if (left.id === activeTaskId) {
@@ -75,6 +81,7 @@ export function QueuePanel({
             const progressValue = clampPercent(progressEvent?.progress ?? task.progress);
             const isEditable = task.status === "QUEUED";
             const isActive = task.id === activeTaskId;
+            const canRetry = task.status === "FAILED" || task.status === "CANCELED";
 
             return (
               <motion.article
@@ -96,6 +103,8 @@ export function QueuePanel({
                       </Badge>
                       <Badge tone="neutral">{engineLabel(task.engine)}</Badge>
                       <Badge tone="neutral">P{task.priority}</Badge>
+                      {task.workspacePath ? <Badge tone="neutral">Workspace</Badge> : null}
+                      {task.contextFiles.length ? <Badge tone="neutral">Files {task.contextFiles.length}</Badge> : null}
                       {isActive ? <Badge tone="info">Active</Badge> : null}
                     </div>
                     <p className="max-w-3xl text-sm leading-6 text-slate-100">
@@ -104,15 +113,37 @@ export function QueuePanel({
                   </div>
                   <div className="flex gap-2">
                     {isEditable ? (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => onMoveTask(task.id, "UP")}>
+                          <ArrowUp className="size-3.5" />
+                          上移
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => onMoveTask(task.id, "DOWN")}>
+                          <ArrowDown className="size-3.5" />
+                          下移
+                        </Button>
+                      </>
+                    ) : null}
+                    {isEditable ? (
                       <Button size="sm" variant="ghost" onClick={() => onEditTask(task)}>
                         <Pencil className="size-3.5" />
                         编辑
                       </Button>
                     ) : null}
+                    {canRetry ? (
+                      <Button size="sm" variant="ghost" onClick={() => onRetryTask(task.id)}>
+                        <RotateCcw className="size-3.5" />
+                        重试
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="ghost" onClick={() => onDuplicateTask(task.id)}>
+                      <Copy className="size-3.5" />
+                      复制
+                    </Button>
                     <Button
                       size="sm"
                       variant="danger"
-                      loading={cancelPending}
+                      loading={actionPending}
                       onClick={() => onCancelTask(task.id)}
                     >
                       <Slash className="size-3.5" />

@@ -18,6 +18,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.fangyu.code.config.FangyuProperties;
 import com.fangyu.code.desktop.DesktopEventPublisher;
 import com.fangyu.code.domain.model.AiEngineKind;
@@ -28,6 +31,7 @@ import com.fangyu.code.persistence.repository.PromptTaskRepository;
 import com.fangyu.code.shared.dto.BatchPromptRequest;
 import com.fangyu.code.shared.dto.BatchSubmitResult;
 import com.fangyu.code.shared.dto.EditQueuedTaskRequest;
+import com.fangyu.code.shared.dto.MoveQueuedTaskRequest;
 import com.fangyu.code.shared.dto.PromptTaskSnapshot;
 import com.fangyu.code.shared.dto.QueueSnapshot;
 import com.fangyu.code.shared.dto.SubmitPromptRequest;
@@ -55,6 +59,7 @@ public class PromptQueueManager {
     private final PromptTaskRepository promptTaskRepository;
     private final DesktopEventPublisher eventPublisher;
     private final ExecutorService virtualTaskExecutor;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public PromptQueueManager(
@@ -68,6 +73,7 @@ public class PromptQueueManager {
         PromptTaskRepository promptTaskRepository,
         DesktopEventPublisher eventPublisher,
         ExecutorService virtualTaskExecutor,
+        ObjectMapper objectMapper,
         Clock clock
     ) {
         this.properties = properties;
@@ -80,6 +86,7 @@ public class PromptQueueManager {
         this.promptTaskRepository = promptTaskRepository;
         this.eventPublisher = eventPublisher;
         this.virtualTaskExecutor = virtualTaskExecutor;
+        this.objectMapper = objectMapper;
         this.clock = clock;
 
         hydrateRecentTasks();
@@ -100,6 +107,8 @@ public class PromptQueueManager {
             request.priority(),
             request.insertMode(),
             request.dualMode(),
+            request.workspacePath(),
+            request.contextFiles(),
             true
         );
     }
@@ -131,6 +140,8 @@ public class PromptQueueManager {
                     request.priority(),
                     request.insertMode(),
                     false,
+                    request.workspacePath(),
+                    request.contextFiles(),
                     false
                 );
                 submittedTaskIds.add(submittedTask.id());
@@ -157,6 +168,8 @@ public class PromptQueueManager {
             task.priority.set(request.priority());
         }
         task.insertMode.set(request.insertMode());
+        task.workspacePath.set(normalizePath(request.workspacePath()));
+        task.contextFiles.set(normalizeContextFiles(request.contextFiles()));
         task.effectivePriority.set(task.priority.get() + (request.insertMode() ? properties.getQueue().getInsertPriorityBonus() : 0));
         queue.removeIf(entry -> entry.taskId.equals(task.id));
         queue.add(new QueueEntry(task.id, task.effectivePriority.get(), task.queueSequence));
@@ -183,6 +196,88 @@ public class PromptQueueManager {
         }
         emitQueueSnapshot();
         return task.snapshot(queuePositionOf(task.id));
+    }
+
+    public PromptTaskSnapshot retry(String taskId) {
+        ManagedTask task = requireTask(taskId);
+        if (task.status.get() != PromptTaskStatus.FAILED && task.status.get() != PromptTaskStatus.CANCELED) {
+            throw new IllegalStateException("Only failed or canceled tasks can be retried");
+        }
+
+        return enqueueTask(
+            task.prompt.get(),
+            task.sessionId,
+            task.engine,
+            task.priority.get(),
+            task.insertMode.get(),
+            task.dualMode,
+            task.workspacePath.get(),
+            task.contextFiles.get(),
+            true
+        );
+    }
+
+    public PromptTaskSnapshot duplicate(String taskId) {
+        ManagedTask task = requireTask(taskId);
+        return enqueueTask(
+            task.prompt.get(),
+            task.sessionId,
+            task.engine,
+            task.priority.get(),
+            task.insertMode.get(),
+            task.dualMode,
+            task.workspacePath.get(),
+            task.contextFiles.get(),
+            true
+        );
+    }
+
+    public QueueSnapshot moveQueuedTask(MoveQueuedTaskRequest request) {
+        ManagedTask task = requireTask(request.taskId());
+        if (task.status.get() != PromptTaskStatus.QUEUED) {
+            throw new IllegalStateException("Only queued tasks can be reordered");
+        }
+
+        List<ManagedTask> queuedTasks = queue.stream()
+            .map(entry -> tasks.get(entry.taskId))
+            .filter(item -> item != null && item.status.get() == PromptTaskStatus.QUEUED)
+            .sorted((left, right) -> QueueEntry.ORDERING.compare(
+                new QueueEntry(left.id, left.effectivePriority.get(), left.queueSequence),
+                new QueueEntry(right.id, right.effectivePriority.get(), right.queueSequence)
+            ))
+            .toList();
+
+        int currentIndex = -1;
+        for (int index = 0; index < queuedTasks.size(); index++) {
+            if (queuedTasks.get(index).id.equals(task.id)) {
+                currentIndex = index;
+                break;
+            }
+        }
+        if (currentIndex < 0) {
+            throw new IllegalStateException("Task is not in the queue");
+        }
+
+        int targetIndex = switch ((request.direction() == null ? "" : request.direction().trim().toUpperCase())) {
+            case "UP" -> Math.max(0, currentIndex - 1);
+            case "DOWN" -> Math.min(queuedTasks.size() - 1, currentIndex + 1);
+            default -> throw new IllegalArgumentException("Unknown move direction: " + request.direction());
+        };
+
+        if (targetIndex == currentIndex) {
+            return snapshot();
+        }
+
+        ManagedTask other = queuedTasks.get(targetIndex);
+        int originalSequence = task.queueSequence;
+        task.queueSequence = other.queueSequence;
+        other.queueSequence = originalSequence;
+
+        rebuildQueueEntries();
+        persist(task);
+        persist(other);
+        emitQueueSnapshot();
+        return snapshot();
     }
 
     public QueueSnapshot pauseQueue() {
@@ -373,6 +468,8 @@ public class PromptQueueManager {
         Integer requestedPriority,
         boolean insertMode,
         boolean dualMode,
+        String workspacePath,
+        List<String> contextFiles,
         boolean emitQueueSnapshot
     ) {
         String taskId = UUID.randomUUID().toString();
@@ -389,6 +486,8 @@ public class PromptQueueManager {
             effectivePriority,
             insertMode,
             dualMode,
+            normalizePath(workspacePath),
+            normalizeContextFiles(contextFiles),
             sequence.incrementAndGet(),
             now
         );
@@ -417,6 +516,8 @@ public class PromptQueueManager {
             task.id,
             task.sessionId,
             task.prompt.get(),
+            task.workspacePath.get(),
+            writeContextFiles(task.contextFiles.get()),
             task.status.get().name(),
             task.engine.name(),
             task.priority.get(),
@@ -443,6 +544,15 @@ public class PromptQueueManager {
         eventPublisher.emit(DesktopEventPublisher.QUEUE_SNAPSHOT, snapshot());
     }
 
+    private void rebuildQueueEntries() {
+        List<QueueEntry> nextEntries = tasks.values().stream()
+            .filter(task -> task.status.get() == PromptTaskStatus.QUEUED)
+            .map(task -> new QueueEntry(task.id, task.effectivePriority.get(), task.queueSequence))
+            .toList();
+        queue.clear();
+        queue.addAll(nextEntries);
+    }
+
     private int queuePositionOf(String taskId) {
         List<String> order = queue.stream()
             .sorted(QueueEntry.ORDERING)
@@ -463,6 +573,8 @@ public class PromptQueueManager {
                 entity.priority() + (entity.insertMode() ? properties.getQueue().getInsertPriorityBonus() : 0),
                 entity.insertMode(),
                 entity.dualMode(),
+                entity.workspacePath(),
+                readContextFiles(entity.contextFilesJson()),
                 entity.queueSequence(),
                 entity.createdAt()
             );
@@ -496,6 +608,40 @@ public class PromptQueueManager {
         return AiEngineKind.from(settingsService.load().defaultEngine());
     }
 
+    private String normalizePath(String path) {
+        return path == null || path.isBlank() ? null : path.strip();
+    }
+
+    private List<String> normalizeContextFiles(List<String> contextFiles) {
+        if (contextFiles == null) {
+            return List.of();
+        }
+        return contextFiles.stream()
+            .filter(path -> path != null && !path.isBlank())
+            .map(String::strip)
+            .distinct()
+            .toList();
+    }
+
+    private String writeContextFiles(List<String> contextFiles) {
+        try {
+            return objectMapper.writeValueAsString(contextFiles == null ? List.of() : contextFiles);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to persist task context files", exception);
+        }
+    }
+
+    private List<String> readContextFiles(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception exception) {
+            return List.of();
+        }
+    }
+
     private static final class QueueEntry {
         private static final Comparator<QueueEntry> ORDERING = Comparator
             .comparingInt(QueueEntry::priority).reversed()
@@ -525,9 +671,11 @@ public class PromptQueueManager {
         private final String sessionId;
         private final AiEngineKind engine;
         private final boolean dualMode;
-        private final int queueSequence;
+        private int queueSequence;
         private final long createdAt;
         private final AtomicReference<String> prompt = new AtomicReference<>();
+        private final AtomicReference<String> workspacePath = new AtomicReference<>();
+        private final AtomicReference<List<String>> contextFiles = new AtomicReference<>(List.of());
         private final AtomicReference<PromptTaskStatus> status = new AtomicReference<>(PromptTaskStatus.QUEUED);
         private final AtomicReference<Integer> priority = new AtomicReference<>();
         private final AtomicReference<Integer> effectivePriority = new AtomicReference<>();
@@ -552,6 +700,8 @@ public class PromptQueueManager {
             int effectivePriority,
             boolean insertMode,
             boolean dualMode,
+            String workspacePath,
+            List<String> contextFiles,
             int queueSequence,
             long createdAt
         ) {
@@ -565,6 +715,8 @@ public class PromptQueueManager {
             this.priority.set(priority);
             this.effectivePriority.set(effectivePriority);
             this.insertMode.set(insertMode);
+            this.workspacePath.set(workspacePath);
+            this.contextFiles.set(contextFiles);
             this.estimatedInputTokens.set(tokenEstimator.estimate(prompt));
         }
 
@@ -573,7 +725,17 @@ public class PromptQueueManager {
         }
 
         private QueuedPromptTask toQueuedPromptTask() {
-            return new QueuedPromptTask(id, sessionId, prompt.get(), engine, priority.get(), insertMode.get(), dualMode);
+            return new QueuedPromptTask(
+                id,
+                sessionId,
+                prompt.get(),
+                workspacePath.get(),
+                contextFiles.get(),
+                engine,
+                priority.get(),
+                insertMode.get(),
+                dualMode
+            );
         }
 
         private PromptTaskSnapshot snapshot(int queuePosition) {
@@ -581,6 +743,8 @@ public class PromptQueueManager {
                 id,
                 sessionId,
                 prompt.get(),
+                workspacePath.get(),
+                contextFiles.get(),
                 status.get().name(),
                 engine.name(),
                 priority.get(),

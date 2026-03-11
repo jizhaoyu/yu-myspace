@@ -8,6 +8,7 @@ import {
   type BootstrapSnapshot,
   type BudgetSnapshot,
   type ConversationSessionView,
+  type EngineStatusSnapshot,
   type HistorySearchResult,
   type PromptMessageView,
   type PromptTaskSnapshot,
@@ -29,8 +30,11 @@ type AppState = {
   streamingByTask: Record<string, string>;
   budget: BudgetSnapshot;
   settings: AppSettings;
+  engineStatuses: EngineStatusSnapshot[];
   searchResult: HistorySearchResult | null;
   composerDraft: string;
+  composerWorkspacePath: string | null;
+  composerContextFiles: string[];
   batchMode: boolean;
   insertMode: boolean;
   dualMode: boolean;
@@ -38,6 +42,8 @@ type AppState = {
   hydrate: (payload: BootstrapSnapshot) => void;
   setSessionId: (sessionId: string) => void;
   setComposerDraft: (draft: string) => void;
+  setComposerWorkspacePath: (workspacePath: string | null) => void;
+  setComposerContextFiles: (contextFiles: string[]) => void;
   setBatchMode: (value: boolean) => void;
   setInsertMode: (value: boolean) => void;
   setDualMode: (value: boolean) => void;
@@ -47,6 +53,7 @@ type AppState = {
   applySupervisor: (payload: SupervisorSnapshot) => void;
   applyBudget: (payload: BudgetSnapshot) => void;
   applySettings: (payload: AppSettings) => void;
+  setEngineStatuses: (payload: EngineStatusSnapshot[]) => void;
   applyHistoryMessage: (payload: PromptMessageView) => void;
   setSearchResult: (payload: HistorySearchResult | null) => void;
 };
@@ -72,8 +79,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   streamingByTask: {},
   budget: EMPTY_BUDGET,
   settings: EMPTY_SETTINGS,
+  engineStatuses: [],
   searchResult: null,
   composerDraft: "",
+  composerWorkspacePath: null,
+  composerContextFiles: [],
   batchMode: false,
   insertMode: false,
   dualMode: false,
@@ -99,10 +109,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       progressByTask: {},
       budget: payload.budget,
       settings: payload.settings,
+      engineStatuses: payload.engineStatuses,
       activeTaskId: payload.queue.activeTaskId,
     }),
   setSessionId: (sessionId) => set({ sessionId }),
   setComposerDraft: (composerDraft) => set({ composerDraft }),
+  setComposerWorkspacePath: (composerWorkspacePath) => set({ composerWorkspacePath }),
+  setComposerContextFiles: (composerContextFiles) => set({ composerContextFiles }),
   setBatchMode: (batchMode) => set({ batchMode }),
   setInsertMode: (insertMode) => set({ insertMode }),
   setDualMode: (dualMode) => set({ dualMode }),
@@ -167,6 +180,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
   applyBudget: (payload) => set({ budget: payload }),
   applySettings: (payload) => set({ settings: payload }),
+  setEngineStatuses: (engineStatuses) => set({ engineStatuses }),
   applyHistoryMessage: (payload) =>
     set((state) => {
       const current = state.messagesBySession[payload.sessionId] ?? [];

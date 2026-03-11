@@ -7,7 +7,9 @@ import {
   type BootstrapSnapshot,
   type BudgetSnapshot,
   type EditQueuedTaskRequest,
+  type EngineStatusSnapshot,
   type HistorySearchResult,
+  type MoveQueuedTaskRequest,
   type PromptMessageView,
   type PromptTaskSnapshot,
   type QueueSnapshot,
@@ -22,6 +24,9 @@ type DesktopCommandMap = {
   submitPrompt: { request: { request: SubmitPromptRequest }; response: PromptTaskSnapshot };
   submitBatchPrompts: { request: { request: BatchPromptRequest }; response: BatchSubmitResult };
   editQueuedTask: { request: { request: EditQueuedTaskRequest }; response: PromptTaskSnapshot };
+  retryTask: { request: { taskId: string }; response: PromptTaskSnapshot };
+  duplicateTask: { request: { taskId: string }; response: PromptTaskSnapshot };
+  moveQueuedTask: { request: { request: MoveQueuedTaskRequest }; response: QueueSnapshot };
   cancelTask: { request: { taskId: string }; response: PromptTaskSnapshot };
   pauseQueue: { request: undefined; response: QueueSnapshot };
   resumeQueue: { request: undefined; response: QueueSnapshot };
@@ -41,9 +46,17 @@ type DesktopCommandMap = {
       autostartEnabled: boolean;
       sessionBudgetUsd?: number;
       weeklyBudgetUsd?: number;
+      claudeExecutable?: string;
+      geminiExecutable?: string;
+      codexEndpoint?: string;
+      codexModel?: string;
+      codexApiKey?: string;
     };
     response: AppSettings;
   };
+  engineStatuses: { request: undefined; response: EngineStatusSnapshot[] };
+  chooseWorkspaceDirectory: { request: undefined; response: string | null };
+  chooseContextFiles: { request: undefined; response: string[] };
 };
 
 type DesktopEventMap = {
@@ -63,6 +76,7 @@ function mockBootstrap(sessionId?: string): BootstrapSnapshot {
   return {
     ...EMPTY_BOOTSTRAP,
     sessionId: sessionId ?? "browser-preview",
+    engineStatuses: [],
     queue: {
       ...EMPTY_QUEUE,
       tasks: [],
@@ -77,6 +91,9 @@ async function invoke<K extends keyof DesktopCommandMap>(
   if (!hasDesktopBridge()) {
     if (command === "bootstrapState") {
       return mockBootstrap(args && "sessionId" in args ? args.sessionId : undefined) as DesktopCommandMap[K]["response"];
+    }
+    if (command === "engineStatuses") {
+      return [] as DesktopCommandMap[K]["response"];
     }
 
     throw new Error(`Krema bridge unavailable for command: ${String(command)}`);
@@ -108,6 +125,10 @@ export const desktopApi = {
     invoke("submitBatchPrompts", { request }),
   editQueuedTask: (request: EditQueuedTaskRequest) =>
     invoke("editQueuedTask", { request }),
+  retryTask: (taskId: string) => invoke("retryTask", { taskId }),
+  duplicateTask: (taskId: string) => invoke("duplicateTask", { taskId }),
+  moveQueuedTask: (request: MoveQueuedTaskRequest) =>
+    invoke("moveQueuedTask", { request }),
   cancelTask: (taskId: string) => invoke("cancelTask", { taskId }),
   pauseQueue: () => invoke("pauseQueue"),
   resumeQueue: () => invoke("resumeQueue"),
@@ -118,6 +139,10 @@ export const desktopApi = {
     invoke("exportSession", { sessionId, outputPath }),
   updateSettings: (payload: DesktopCommandMap["updateSettings"]["request"]) =>
     invoke("updateSettings", payload),
+  engineStatuses: () => invoke("engineStatuses"),
+  chooseWorkspaceDirectory: () => invoke("chooseWorkspaceDirectory"),
+  chooseContextFiles: () => invoke("chooseContextFiles"),
+  hasBridge: () => hasDesktopBridge(),
 };
 
 export const desktopEvents = {
