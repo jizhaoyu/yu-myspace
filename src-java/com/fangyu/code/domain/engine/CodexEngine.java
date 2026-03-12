@@ -51,7 +51,7 @@ public class CodexEngine implements AiEngine {
 
     @Override
     public AiEngineKind kind() {
-        return AiEngineKind.OPENAI_CODEX;
+        return AiEngineKind.OPENCODE;
     }
 
     @Override
@@ -69,7 +69,7 @@ public class CodexEngine implements AiEngine {
     @Override
     public EngineExecutionResult execute(EngineExecutionRequest request, EngineExecutionObserver observer) throws Exception {
         if (!isAvailable()) {
-            throw new IllegalStateException("OpenAI Codex API key or endpoint is missing");
+            throw new IllegalStateException("OpenCode API key or endpoint is missing");
         }
 
         long startedAt = clock.millis();

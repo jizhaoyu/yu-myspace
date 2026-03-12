@@ -7,8 +7,6 @@ import {
   Play,
   RefreshCcw,
   Settings2,
-  TerminalSquare,
-  Unplug,
   Wallet,
   Zap,
 } from "lucide-react";
@@ -17,7 +15,7 @@ import { Badge, Button, FieldLabel, Input, Panel, ProgressBar, Toggle } from "@/
 import { type AppSettings, type BudgetSnapshot, type EngineStatusSnapshot, type QueueSnapshot } from "@/lib/types";
 import { clampPercent, currency, engineLabel } from "@/lib/utils";
 
-const ENGINE_OPTIONS = ["OPENAI_CODEX", "CLAUDE_CODE", "GEMINI"] as const;
+const ENGINE_OPTIONS = ["OPENCODE"] as const;
 const THEME_OPTIONS = ["system", "dark", "light"] as const;
 
 type Notice = {
@@ -35,11 +33,13 @@ type BudgetHeaderProps = {
   queuePending: boolean;
   exportPending: boolean;
   settingsPending: boolean;
+  openLogsPending: boolean;
   engineStatusPending: boolean;
   notice: Notice | null;
   onToggleQueue: () => void;
   onExportSession: () => void;
   onSaveSettings: (payload: AppSettings) => void;
+  onOpenLogsDirectory: () => void;
   onRefreshEngineStatuses: () => void;
 };
 
@@ -64,11 +64,13 @@ export function BudgetHeader({
   queuePending,
   exportPending,
   settingsPending,
+  openLogsPending,
   engineStatusPending,
   notice,
   onToggleQueue,
   onExportSession,
   onSaveSettings,
+  onOpenLogsDirectory,
   onRefreshEngineStatuses,
 }: BudgetHeaderProps) {
   const [draft, setDraft] = useState({
@@ -77,8 +79,6 @@ export function BudgetHeader({
     autostartEnabled: settings.autostartEnabled,
     sessionBudgetUsd: String(settings.sessionBudgetUsd),
     weeklyBudgetUsd: String(settings.weeklyBudgetUsd),
-    claudeExecutable: settings.claudeExecutable,
-    geminiExecutable: settings.geminiExecutable,
     codexEndpoint: settings.codexEndpoint,
     codexModel: settings.codexModel,
     codexApiKey: settings.codexApiKey,
@@ -91,20 +91,16 @@ export function BudgetHeader({
       autostartEnabled: settings.autostartEnabled,
       sessionBudgetUsd: String(settings.sessionBudgetUsd),
       weeklyBudgetUsd: String(settings.weeklyBudgetUsd),
-      claudeExecutable: settings.claudeExecutable,
-      geminiExecutable: settings.geminiExecutable,
       codexEndpoint: settings.codexEndpoint,
       codexModel: settings.codexModel,
       codexApiKey: settings.codexApiKey,
     });
   }, [
     settings.autostartEnabled,
-    settings.claudeExecutable,
     settings.codexApiKey,
     settings.codexEndpoint,
     settings.codexModel,
     settings.defaultEngine,
-    settings.geminiExecutable,
     settings.sessionBudgetUsd,
     settings.theme,
     settings.weeklyBudgetUsd,
@@ -180,6 +176,13 @@ export function BudgetHeader({
                 >
                   <Download className="size-4" />
                   导出会话
+                </Button>
+                <Button
+                  variant="ghost"
+                  loading={openLogsPending}
+                  onClick={onOpenLogsDirectory}
+                >
+                  打开日志
                 </Button>
               </div>
             </div>
@@ -341,32 +344,6 @@ export function BudgetHeader({
               />
             </div>
             <div>
-              <FieldLabel>Claude CLI</FieldLabel>
-              <Input
-                value={draft.claudeExecutable}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    claudeExecutable: event.target.value,
-                  }))
-                }
-                placeholder="claude"
-              />
-            </div>
-            <div>
-              <FieldLabel>Gemini CLI</FieldLabel>
-              <Input
-                value={draft.geminiExecutable}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    geminiExecutable: event.target.value,
-                  }))
-                }
-                placeholder="gemini"
-              />
-            </div>
-            <div>
               <FieldLabel>Codex Endpoint</FieldLabel>
               <Input
                 value={draft.codexEndpoint}
@@ -412,7 +389,7 @@ export function BudgetHeader({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-white">引擎健康检查</div>
-                <div className="text-xs text-slate-400">检查 CLI 是否可执行，以及 Codex API 是否完成必要配置。</div>
+                <div className="text-xs text-slate-400">检查 OpenCode (Codex API) 是否完成必要配置。</div>
               </div>
               <Button type="button" size="sm" variant="ghost" loading={engineStatusPending} onClick={onRefreshEngineStatuses}>
                 <RefreshCcw className="size-3.5" />
@@ -424,13 +401,7 @@ export function BudgetHeader({
                 <div key={status.engine} className="rounded-2xl border border-white/8 bg-white/4 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
-                      {status.engine === "OPENAI_CODEX" ? (
-                        <KeyRound className="size-4 text-amber-300" />
-                      ) : status.available ? (
-                        <TerminalSquare className="size-4 text-emerald-300" />
-                      ) : (
-                        <Unplug className="size-4 text-yellow-300" />
-                      )}
+                      <KeyRound className="size-4 text-amber-300" />
                       {engineLabel(status.engine)}
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -473,11 +444,12 @@ export function BudgetHeader({
                   weeklyBudgetUsd: Number.isFinite(weeklyBudget)
                     ? weeklyBudget
                     : settings.weeklyBudgetUsd,
-                  claudeExecutable: draft.claudeExecutable,
-                  geminiExecutable: draft.geminiExecutable,
                   codexEndpoint: draft.codexEndpoint,
                   codexModel: draft.codexModel,
                   codexApiKey: draft.codexApiKey,
+                  skillsEnabled: settings.skillsEnabled,
+                  disabledSkillIds: settings.disabledSkillIds,
+                  manualSkillIds: settings.manualSkillIds,
                 });
               }}
             >

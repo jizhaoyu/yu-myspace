@@ -62,6 +62,13 @@ export function QueuePanel({
     return left.queuePosition - right.queuePosition || right.createdAt - left.createdAt;
   });
 
+  const queuedPositions = tasks
+    .filter((task) => task.status === "QUEUED")
+    .map((task) => task.queuePosition)
+    .filter((value) => value > 0);
+  const minQueued = queuedPositions.length ? Math.min(...queuedPositions) : 0;
+  const maxQueued = queuedPositions.length ? Math.max(...queuedPositions) : 0;
+
   return (
     <Panel
       title="任务队列"
@@ -82,6 +89,8 @@ export function QueuePanel({
             const isEditable = task.status === "QUEUED";
             const isActive = task.id === activeTaskId;
             const canRetry = task.status === "FAILED" || task.status === "CANCELED";
+            const canMoveUp = isEditable && task.queuePosition > minQueued;
+            const canMoveDown = isEditable && task.queuePosition < maxQueued;
 
             return (
               <motion.article
@@ -103,6 +112,8 @@ export function QueuePanel({
                       </Badge>
                       <Badge tone="neutral">{engineLabel(task.engine)}</Badge>
                       <Badge tone="neutral">P{task.priority}</Badge>
+                      {task.insertMode ? <Badge tone="warning">插队</Badge> : null}
+                      {task.dualMode ? <Badge tone="info">双路</Badge> : null}
                       {task.workspacePath ? <Badge tone="neutral">Workspace</Badge> : null}
                       {task.contextFiles.length ? <Badge tone="neutral">Files {task.contextFiles.length}</Badge> : null}
                       {isActive ? <Badge tone="info">Active</Badge> : null}
@@ -114,29 +125,39 @@ export function QueuePanel({
                   <div className="flex gap-2">
                     {isEditable ? (
                       <>
-                        <Button size="sm" variant="ghost" onClick={() => onMoveTask(task.id, "UP")}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!canMoveUp || actionPending}
+                          onClick={() => onMoveTask(task.id, "UP")}
+                        >
                           <ArrowUp className="size-3.5" />
                           上移
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => onMoveTask(task.id, "DOWN")}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!canMoveDown || actionPending}
+                          onClick={() => onMoveTask(task.id, "DOWN")}
+                        >
                           <ArrowDown className="size-3.5" />
                           下移
                         </Button>
                       </>
                     ) : null}
                     {isEditable ? (
-                      <Button size="sm" variant="ghost" onClick={() => onEditTask(task)}>
+                      <Button size="sm" variant="ghost" disabled={actionPending} onClick={() => onEditTask(task)}>
                         <Pencil className="size-3.5" />
                         编辑
                       </Button>
                     ) : null}
                     {canRetry ? (
-                      <Button size="sm" variant="ghost" onClick={() => onRetryTask(task.id)}>
+                      <Button size="sm" variant="ghost" disabled={actionPending} onClick={() => onRetryTask(task.id)}>
                         <RotateCcw className="size-3.5" />
                         重试
                       </Button>
                     ) : null}
-                    <Button size="sm" variant="ghost" onClick={() => onDuplicateTask(task.id)}>
+                    <Button size="sm" variant="ghost" disabled={actionPending} onClick={() => onDuplicateTask(task.id)}>
                       <Copy className="size-3.5" />
                       复制
                     </Button>
@@ -144,6 +165,7 @@ export function QueuePanel({
                       size="sm"
                       variant="danger"
                       loading={actionPending}
+                      disabled={actionPending}
                       onClick={() => onCancelTask(task.id)}
                     >
                       <Slash className="size-3.5" />

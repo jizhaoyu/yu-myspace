@@ -25,9 +25,7 @@ public class CostTrackerService {
 
     public double calculate(AiEngineKind kind, int inputTokens, int outputTokens) {
         FangyuProperties.EngineCommon pricing = switch (kind) {
-            case CLAUDE_CODE -> properties.getEngines().getClaude();
-            case OPENAI_CODEX -> properties.getEngines().getCodex();
-            case GEMINI -> properties.getEngines().getGemini();
+            case OPENCODE -> properties.getEngines().getCodex();
         };
 
         return ((inputTokens / 1000.0d) * pricing.getInputCostPer1k())

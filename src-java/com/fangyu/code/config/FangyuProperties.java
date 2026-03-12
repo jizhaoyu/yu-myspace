@@ -18,6 +18,7 @@ public class FangyuProperties {
     private Budgets budgets = new Budgets();
     private Engines engines = new Engines();
     private Sessions sessions = new Sessions();
+    private Mcp mcp = new Mcp();
 
     public Desktop getDesktop() {
         return desktop;
@@ -65,6 +66,14 @@ public class FangyuProperties {
 
     public void setSessions(Sessions sessions) {
         this.sessions = sessions;
+    }
+
+    public Mcp getMcp() {
+        return mcp;
+    }
+
+    public void setMcp(Mcp mcp) {
+        this.mcp = mcp;
     }
 
     public static class Desktop {
@@ -229,11 +238,30 @@ public class FangyuProperties {
         }
     }
 
+    public static class Mcp {
+        private String registryPath = "";
+        private String opencodeConfigPath = "";
+
+        public String getRegistryPath() {
+            return registryPath;
+        }
+
+        public void setRegistryPath(String registryPath) {
+            this.registryPath = registryPath;
+        }
+
+        public String getOpencodeConfigPath() {
+            return opencodeConfigPath;
+        }
+
+        public void setOpencodeConfigPath(String opencodeConfigPath) {
+            this.opencodeConfigPath = opencodeConfigPath;
+        }
+    }
+
     public static class Engines {
-        private AiEngineKind defaultEngine = AiEngineKind.OPENAI_CODEX;
-        private CliEngine claude = new CliEngine();
+        private AiEngineKind defaultEngine = AiEngineKind.OPENCODE;
         private CodexEngine codex = new CodexEngine();
-        private CliEngine gemini = new CliEngine();
 
         public AiEngineKind getDefaultEngine() {
             return defaultEngine;
@@ -243,28 +271,12 @@ public class FangyuProperties {
             this.defaultEngine = defaultEngine;
         }
 
-        public CliEngine getClaude() {
-            return claude;
-        }
-
-        public void setClaude(CliEngine claude) {
-            this.claude = claude;
-        }
-
         public CodexEngine getCodex() {
             return codex;
         }
 
         public void setCodex(CodexEngine codex) {
             this.codex = codex;
-        }
-
-        public CliEngine getGemini() {
-            return gemini;
-        }
-
-        public void setGemini(CliEngine gemini) {
-            this.gemini = gemini;
         }
     }
 

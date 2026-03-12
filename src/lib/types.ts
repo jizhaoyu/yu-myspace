@@ -1,4 +1,4 @@
-export type EngineKind = "CLAUDE_CODE" | "OPENAI_CODEX" | "GEMINI";
+export type EngineKind = "OPENCODE";
 export type TaskStatus =
   | "QUEUED"
   | "PROCESSING"
@@ -13,11 +13,70 @@ export interface AppSettings {
   autostartEnabled: boolean;
   sessionBudgetUsd: number;
   weeklyBudgetUsd: number;
-  claudeExecutable: string;
-  geminiExecutable: string;
   codexEndpoint: string;
   codexModel: string;
   codexApiKey: string;
+  skillsEnabled: boolean;
+  disabledSkillIds: string[];
+  manualSkillIds: string[];
+}
+
+export interface SkillDefinitionView {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  enabled: boolean;
+}
+
+export interface SkillMatchSnapshot {
+  autoMatchedSkillIds: string[];
+  manualSkillIds: string[];
+  appliedSkillIds: string[];
+  injected: boolean;
+}
+
+export interface SkillSettingsUpdateRequest {
+  skillsEnabled?: boolean;
+  disabledSkillIds?: string[];
+  manualSkillIds?: string[];
+}
+
+export interface McpServerSpec {
+  transport: "stdio" | "http" | "sse" | string;
+  command: string;
+  args: string[];
+  url: string;
+  env: Record<string, string>;
+  timeoutMs: number | null;
+}
+
+export interface McpServerEntry {
+  id: string;
+  name: string;
+  spec: McpServerSpec;
+  enabled: boolean;
+  targetApps: string[];
+  description: string;
+  tags: string[];
+  updatedAt: number;
+}
+
+export interface McpRegistrySnapshot {
+  servers: McpServerEntry[];
+  updatedAt: number;
+  registryPath: string;
+  opencodeConfigPath: string;
+}
+
+export interface McpUpsertRequest {
+  id?: string;
+  name: string;
+  spec: McpServerSpec;
+  enabled?: boolean;
+  targetApps?: string[];
+  description?: string;
+  tags?: string[];
 }
 
 export interface EngineStatusSnapshot {
@@ -119,6 +178,7 @@ export interface PromptTaskSnapshot {
   stage: string;
   progress: number;
   errorMessage: string | null;
+  skillMatch: SkillMatchSnapshot;
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
   costUsd: number;
@@ -193,15 +253,16 @@ export interface BootstrapSnapshot {
 
 export const EMPTY_SETTINGS: AppSettings = {
   theme: "system",
-  defaultEngine: "OPENAI_CODEX",
+  defaultEngine: "OPENCODE",
   autostartEnabled: false,
   sessionBudgetUsd: 12.5,
   weeklyBudgetUsd: 60,
-  claudeExecutable: "claude",
-  geminiExecutable: "gemini",
   codexEndpoint: "https://api.openai.com/v1/responses",
   codexModel: "gpt-5-codex",
   codexApiKey: "",
+  skillsEnabled: true,
+  disabledSkillIds: [],
+  manualSkillIds: [],
 };
 
 export const EMPTY_BUDGET: BudgetSnapshot = {

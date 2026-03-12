@@ -1,6 +1,7 @@
 import {
   EMPTY_BOOTSTRAP,
   EMPTY_QUEUE,
+  EMPTY_SETTINGS,
   type AppSettings,
   type BatchPromptRequest,
   type BatchSubmitResult,
@@ -9,10 +10,15 @@ import {
   type EditQueuedTaskRequest,
   type EngineStatusSnapshot,
   type HistorySearchResult,
+  type McpRegistrySnapshot,
+  type McpUpsertRequest,
   type MoveQueuedTaskRequest,
   type PromptMessageView,
   type PromptTaskSnapshot,
   type QueueSnapshot,
+  type SkillDefinitionView,
+  type SkillMatchSnapshot,
+  type SkillSettingsUpdateRequest,
   type SubmitPromptRequest,
   type SupervisorSnapshot,
   type TaskChunkEvent,
@@ -41,22 +47,43 @@ type DesktopCommandMap = {
   };
   updateSettings: {
     request: {
-      theme?: string;
-      defaultEngine?: string;
-      autostartEnabled: boolean;
-      sessionBudgetUsd?: number;
-      weeklyBudgetUsd?: number;
-      claudeExecutable?: string;
-      geminiExecutable?: string;
-      codexEndpoint?: string;
-      codexModel?: string;
-      codexApiKey?: string;
+      request: {
+        theme?: string;
+        defaultEngine?: string;
+        autostartEnabled: boolean;
+        sessionBudgetUsd?: number;
+        weeklyBudgetUsd?: number;
+        codexEndpoint?: string;
+        codexModel?: string;
+        codexApiKey?: string;
+        skillsEnabled?: boolean;
+        disabledSkillIds?: string[];
+        manualSkillIds?: string[];
+      };
     };
     response: AppSettings;
   };
+  updateSkillSettings: {
+    request: { request: SkillSettingsUpdateRequest };
+    response: AppSettings;
+  };
+  listMcpServers: { request: undefined; response: McpRegistrySnapshot };
+  upsertMcpServer: { request: { request: McpUpsertRequest }; response: McpRegistrySnapshot };
+  deleteMcpServer: { request: { id: string }; response: McpRegistrySnapshot };
+  setMcpServerEnabled: { request: { id: string; enabled: boolean }; response: McpRegistrySnapshot };
+  syncMcpToOpenCode: { request: undefined; response: McpRegistrySnapshot };
+  importMcpFromOpenCode: { request: undefined; response: McpRegistrySnapshot };
+  listSkills: { request: undefined; response: SkillDefinitionView[] };
+  refreshSkills: { request: undefined; response: SkillDefinitionView[] };
+  previewSkillMatch: { request: { prompt: string }; response: SkillMatchSnapshot };
   engineStatuses: { request: undefined; response: EngineStatusSnapshot[] };
   chooseWorkspaceDirectory: { request: undefined; response: string | null };
   chooseContextFiles: { request: undefined; response: string[] };
+  copyToClipboard: { request: { text: string }; response: string };
+  readClipboardText: { request: undefined; response: string };
+  openPath: { request: { path: string }; response: string };
+  openLogsDirectory: { request: undefined; response: string };
+  notifyUser: { request: { title: string; body: string }; response: string };
 };
 
 type DesktopEventMap = {
@@ -68,6 +95,8 @@ type DesktopEventMap = {
   "settings:updated": AppSettings;
   "history:updated": PromptMessageView;
 };
+
+type Unsubscribe = () => void;
 
 const hasDesktopBridge = () =>
   typeof window !== "undefined" && typeof window.krema?.invoke === "function";
@@ -95,6 +124,42 @@ async function invoke<K extends keyof DesktopCommandMap>(
     if (command === "engineStatuses") {
       return [] as DesktopCommandMap[K]["response"];
     }
+    if (command === "listSkills" || command === "refreshSkills") {
+      return [] as DesktopCommandMap[K]["response"];
+    }
+    if (command === "copyToClipboard" || command === "notifyUser") {
+      return "ok" as DesktopCommandMap[K]["response"];
+    }
+    if (command === "readClipboardText") {
+      return "" as DesktopCommandMap[K]["response"];
+    }
+    if (command === "openPath" || command === "openLogsDirectory") {
+      return "" as DesktopCommandMap[K]["response"];
+    }
+    if (command === "previewSkillMatch") {
+      return {
+        autoMatchedSkillIds: [],
+        manualSkillIds: [],
+        appliedSkillIds: [],
+        injected: false,
+      } as DesktopCommandMap[K]["response"];
+    }
+    if (command === "updateSkillSettings") {
+      return EMPTY_SETTINGS as DesktopCommandMap[K]["response"];
+    }
+    if (command === "listMcpServers"
+      || command === "upsertMcpServer"
+      || command === "deleteMcpServer"
+      || command === "setMcpServerEnabled"
+      || command === "syncMcpToOpenCode"
+      || command === "importMcpFromOpenCode") {
+      return {
+        servers: [],
+        updatedAt: 0,
+        registryPath: "",
+        opencodeConfigPath: "",
+      } as DesktopCommandMap[K]["response"];
+    }
 
     throw new Error(`Krema bridge unavailable for command: ${String(command)}`);
   }
@@ -108,12 +173,13 @@ async function invoke<K extends keyof DesktopCommandMap>(
 function on<K extends keyof DesktopEventMap>(
   event: K,
   handler: (payload: DesktopEventMap[K]) => void,
-) {
+): Unsubscribe {
   if (!hasDesktopBridge()) {
     return () => undefined;
   }
 
-  return window.krema!.on<DesktopEventMap[K]>(event, handler);
+  const dispose = window.krema!.on<DesktopEventMap[K]>(event, handler);
+  return typeof dispose === "function" ? dispose : () => undefined;
 }
 
 export const desktopApi = {
@@ -137,11 +203,27 @@ export const desktopApi = {
     invoke("searchHistory", { query, limit }),
   exportSession: (sessionId: string, outputPath?: string) =>
     invoke("exportSession", { sessionId, outputPath }),
-  updateSettings: (payload: DesktopCommandMap["updateSettings"]["request"]) =>
-    invoke("updateSettings", payload),
+  updateSettings: (payload: DesktopCommandMap["updateSettings"]["request"]["request"]) =>
+    invoke("updateSettings", { request: payload }),
+  updateSkillSettings: (request: SkillSettingsUpdateRequest) =>
+    invoke("updateSkillSettings", { request }),
+  listMcpServers: () => invoke("listMcpServers"),
+  upsertMcpServer: (request: McpUpsertRequest) => invoke("upsertMcpServer", { request }),
+  deleteMcpServer: (id: string) => invoke("deleteMcpServer", { id }),
+  setMcpServerEnabled: (id: string, enabled: boolean) => invoke("setMcpServerEnabled", { id, enabled }),
+  syncMcpToOpenCode: () => invoke("syncMcpToOpenCode"),
+  importMcpFromOpenCode: () => invoke("importMcpFromOpenCode"),
+  listSkills: () => invoke("listSkills"),
+  refreshSkills: () => invoke("refreshSkills"),
+  previewSkillMatch: (prompt: string) => invoke("previewSkillMatch", { prompt }),
   engineStatuses: () => invoke("engineStatuses"),
   chooseWorkspaceDirectory: () => invoke("chooseWorkspaceDirectory"),
   chooseContextFiles: () => invoke("chooseContextFiles"),
+  copyToClipboard: (text: string) => invoke("copyToClipboard", { text }),
+  readClipboardText: () => invoke("readClipboardText"),
+  openPath: (path: string) => invoke("openPath", { path }),
+  openLogsDirectory: () => invoke("openLogsDirectory"),
+  notifyUser: (title: string, body: string) => invoke("notifyUser", { title, body }),
   hasBridge: () => hasDesktopBridge(),
 };
 

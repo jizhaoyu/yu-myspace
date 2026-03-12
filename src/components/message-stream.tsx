@@ -10,6 +10,7 @@ type MessageStreamProps = {
   messages: PromptMessageView[];
   tasks: Record<string, PromptTaskSnapshot>;
   streamingByTask: Record<string, string>;
+  onCopyMessage: (content: string) => void;
 };
 
 export function MessageStream({
@@ -17,6 +18,7 @@ export function MessageStream({
   messages,
   tasks,
   streamingByTask,
+  onCopyMessage,
 }: MessageStreamProps) {
   const liveEntries = Object.entries(streamingByTask)
     .map(([taskId, chunk]) => ({
@@ -72,6 +74,13 @@ export function MessageStream({
               <span>Input {message.inputTokens}</span>
               <span>Output {message.outputTokens}</span>
               <span>Cost {currency(message.costUsd)}</span>
+              <button
+                type="button"
+                className="rounded-md px-2 py-0.5 text-sky-300 transition hover:bg-white/10"
+                onClick={() => onCopyMessage(message.content)}
+              >
+                复制
+              </button>
             </div>
           </motion.article>
         ))}

@@ -77,12 +77,9 @@ export function taskStatusLabel(status: string) {
 
 export function engineLabel(engine: string) {
   switch (engine) {
+    case "OPENCODE":
     case "OPENAI_CODEX":
-      return "OpenAI Codex";
-    case "CLAUDE_CODE":
-      return "Claude Code";
-    case "GEMINI":
-      return "Gemini";
+      return "OpenCode";
     default:
       return engine;
   }

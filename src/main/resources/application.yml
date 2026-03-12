@@ -51,14 +51,7 @@ fangyu:
     session-usd: 12.5
     weekly-usd: 60.0
   engines:
-    default-engine: OPENAI_CODEX
-    claude:
-      enabled: true
-      executable: claude
-      working-directory: .
-      timeout-seconds: 900
-      input-cost-per-1k: 0.015
-      output-cost-per-1k: 0.075
+    default-engine: OPENCODE
     codex:
       enabled: true
       endpoint: https://api.openai.com/v1/responses
@@ -67,12 +60,8 @@ fangyu:
       timeout-seconds: 900
       input-cost-per-1k: 0.015
       output-cost-per-1k: 0.06
-    gemini:
-      enabled: true
-      executable: gemini
-      working-directory: .
-      timeout-seconds: 900
-      input-cost-per-1k: 0.005
-      output-cost-per-1k: 0.015
   sessions:
     default-title: 新会话
+  mcp:
+    registry-path: ${FANGYU_MCP_REGISTRY_PATH:}
+    opencode-config-path: ${FANGYU_OPENCODE_CONFIG_PATH:}

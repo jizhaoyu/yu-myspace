@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -34,12 +36,15 @@ import com.fangyu.code.shared.dto.EditQueuedTaskRequest;
 import com.fangyu.code.shared.dto.MoveQueuedTaskRequest;
 import com.fangyu.code.shared.dto.PromptTaskSnapshot;
 import com.fangyu.code.shared.dto.QueueSnapshot;
+import com.fangyu.code.shared.dto.SkillMatchSnapshot;
 import com.fangyu.code.shared.dto.SubmitPromptRequest;
 import com.fangyu.code.shared.dto.SupervisorSnapshot;
 import com.fangyu.code.shared.dto.TaskProgressEvent;
 
 @Service
 public class PromptQueueManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(PromptQueueManager.class);
 
     private final PriorityBlockingQueue<QueueEntry> queue = new PriorityBlockingQueue<>(32, QueueEntry.ORDERING);
     private final Map<String, ManagedTask> tasks = new ConcurrentHashMap<>();
@@ -98,6 +103,7 @@ public class PromptQueueManager {
 
     public PromptTaskSnapshot submit(SubmitPromptRequest request) {
         AiEngineKind engine = resolveEngine(request.engine());
+        engineRegistry.require(engine);
         ensureQueueCapacity(1);
         String sessionId = historyService.ensureSession(request.sessionId(), engine).id();
         return enqueueTask(
@@ -127,6 +133,7 @@ public class PromptQueueManager {
         }
 
         AiEngineKind engine = resolveEngine(request.engine());
+        engineRegistry.require(engine);
         ensureQueueCapacity(prompts.size());
         String sessionId = historyService.ensureSession(request.sessionId(), engine).id();
 
@@ -282,6 +289,7 @@ public class PromptQueueManager {
 
     public QueueSnapshot pauseQueue() {
         paused.set(true);
+        logger.info("queue paused pending={}", queue.size());
         emitQueueSnapshot();
         return snapshot();
     }
@@ -291,6 +299,7 @@ public class PromptQueueManager {
         synchronized (pauseMonitor) {
             pauseMonitor.notifyAll();
         }
+        logger.info("queue resumed pending={}", queue.size());
         emitQueueSnapshot();
         return snapshot();
     }
@@ -353,6 +362,7 @@ public class PromptQueueManager {
             }
 
             activeTaskId.set(task.id);
+            logger.info("task dispatch id={} session={} engine={}", task.id, task.sessionId, task.engine);
             task.status.set(PromptTaskStatus.PROCESSING);
             task.stage.set("queue:dispatched");
             task.progress.set(0.05d);
@@ -395,27 +405,61 @@ public class PromptQueueManager {
                 task.estimatedInputTokens.set(report.inputTokens());
                 task.estimatedOutputTokens.set(report.outputTokens());
                 task.costUsd.set(report.costUsd());
+                task.skillMatch.set(report.skillMatch());
                 task.completedAt.set(clock.millis());
                 persist(task);
+                logger.info(
+                    "task completed id={} inputTokens={} outputTokens={} cost={}",
+                    task.id,
+                    task.estimatedInputTokens.get(),
+                    task.estimatedOutputTokens.get(),
+                    task.costUsd.get()
+                );
             } catch (CancellationException | InterruptedException exception) {
                 task.status.set(PromptTaskStatus.CANCELED);
                 task.stage.set("task:canceled");
                 task.progress.set(1d);
+                task.errorMessage.set("任务已取消");
                 task.completedAt.set(clock.millis());
                 persist(task);
+                emitProgress(new TaskProgressEvent(
+                    task.id,
+                    task.sessionId,
+                    "CANCELED",
+                    task.stage.get(),
+                    1d,
+                    task.errorMessage.get(),
+                    "NONE",
+                    "retry-or-edit",
+                    clock.millis()
+                ));
+                logger.warn("task canceled id={} session={}", task.id, task.sessionId);
             } catch (ExecutionException exception) {
                 Throwable cause = exception.getCause() == null ? exception : exception.getCause();
                 if (task.cancelRequested.get()) {
                     task.status.set(PromptTaskStatus.CANCELED);
                     task.stage.set("task:canceled");
+                    task.errorMessage.set("任务已取消");
                 } else {
                     task.status.set(PromptTaskStatus.FAILED);
                     task.stage.set("task:failed");
-                    task.errorMessage.set(cause.getMessage());
+                    task.errorMessage.set(toUserMessage(cause));
                 }
                 task.progress.set(1d);
                 task.completedAt.set(clock.millis());
                 persist(task);
+                emitProgress(new TaskProgressEvent(
+                    task.id,
+                    task.sessionId,
+                    task.status.get().name(),
+                    task.stage.get(),
+                    1d,
+                    task.errorMessage.get(),
+                    "NONE",
+                    "retry-or-edit",
+                    clock.millis()
+                ));
+                logger.error("task failed id={} session={} reason={}", task.id, task.sessionId, task.errorMessage.get());
             } finally {
                 task.runningFuture.set(null);
                 activeTaskId.set(null);
@@ -447,9 +491,10 @@ public class PromptQueueManager {
     }
 
     private AiEngineKind resolveEngine(String requestedEngine) {
-        return requestedEngine == null || requestedEngine.isBlank()
+        AiEngineKind resolved = requestedEngine == null || requestedEngine.isBlank()
             ? settingsDefaultEngine()
             : AiEngineKind.from(requestedEngine);
+        return resolved == null ? AiEngineKind.OPENCODE : resolved;
     }
 
     private void ensureQueueCapacity(int additionalQueuedTasks) {
@@ -493,6 +538,16 @@ public class PromptQueueManager {
         );
         tasks.put(taskId, managedTask);
         queue.add(new QueueEntry(taskId, managedTask.effectivePriority.get(), managedTask.queueSequence));
+        logger.info(
+            "task enqueued id={} session={} engine={} priority={} insert={} dual={} queued={}",
+            taskId,
+            sessionId,
+            engine,
+            priority,
+            insertMode,
+            dualMode,
+            queue.size()
+        );
         persist(managedTask);
         if (emitQueueSnapshot) {
             emitQueueSnapshot();
@@ -612,6 +667,27 @@ public class PromptQueueManager {
         return path == null || path.isBlank() ? null : path.strip();
     }
 
+    private String toUserMessage(Throwable throwable) {
+        String message = throwable == null ? "" : String.valueOf(throwable.getMessage());
+        String normalized = message == null ? "" : message.toLowerCase();
+        if (normalized.contains("timed out") || normalized.contains("timeout")) {
+            return "引擎响应超时，请稍后重试或缩小上下文范围。";
+        }
+        if (normalized.contains("api key") || normalized.contains("401") || normalized.contains("403")) {
+            return "OpenCode 认证失败，请检查 API Key 与权限配置。";
+        }
+        if (normalized.contains("unavailable") || normalized.contains("configured") || normalized.contains("missing")) {
+            return "OpenCode 引擎不可用，请先在设置中完成配置。";
+        }
+        if (normalized.contains("429") || normalized.contains("rate")) {
+            return "请求过于频繁，请稍后重试。";
+        }
+        if (normalized.isBlank()) {
+            return "执行失败，请重试或检查引擎配置。";
+        }
+        return message;
+    }
+
     private List<String> normalizeContextFiles(List<String> contextFiles) {
         if (contextFiles == null) {
             return List.of();
@@ -686,6 +762,9 @@ public class PromptQueueManager {
         private final AtomicReference<Integer> estimatedInputTokens = new AtomicReference<>(0);
         private final AtomicReference<Integer> estimatedOutputTokens = new AtomicReference<>(0);
         private final AtomicReference<Double> costUsd = new AtomicReference<>(0d);
+        private final AtomicReference<SkillMatchSnapshot> skillMatch = new AtomicReference<>(
+            new SkillMatchSnapshot(List.of(), List.of(), List.of(), false)
+        );
         private final AtomicReference<Long> startedAt = new AtomicReference<>(null);
         private final AtomicReference<Long> completedAt = new AtomicReference<>(null);
         private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
@@ -757,6 +836,7 @@ public class PromptQueueManager {
                 stage.get(),
                 progress.get(),
                 errorMessage.get(),
+                skillMatch.get(),
                 estimatedInputTokens.get(),
                 estimatedOutputTokens.get(),
                 costUsd.get()

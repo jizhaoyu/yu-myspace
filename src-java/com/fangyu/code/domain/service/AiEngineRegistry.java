@@ -24,7 +24,7 @@ public class AiEngineRegistry {
     public AiEngine require(AiEngineKind kind) {
         AiEngine engine = engines.get(kind);
         if (engine == null || !engine.isAvailable()) {
-            throw new IllegalStateException("Engine is unavailable: " + kind);
+            throw new IllegalStateException("OpenCode 引擎不可用，请先在设置中检查 endpoint、model 与 API key。");
         }
         return engine;
     }

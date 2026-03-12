@@ -18,6 +18,7 @@ public record PromptTaskSnapshot(
     String stage,
     double progress,
     String errorMessage,
+    SkillMatchSnapshot skillMatch,
     int estimatedInputTokens,
     int estimatedOutputTokens,
     double costUsd

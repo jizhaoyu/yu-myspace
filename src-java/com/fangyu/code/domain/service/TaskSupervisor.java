@@ -24,10 +24,12 @@ import com.fangyu.code.shared.dto.TaskProgressEvent;
 public class TaskSupervisor {
 
     private final AiEngineRegistry engineRegistry;
+    private final EngineConfigurationService engineConfigurationService;
     private final Clock clock;
 
-    public TaskSupervisor(AiEngineRegistry engineRegistry, Clock clock) {
+    public TaskSupervisor(AiEngineRegistry engineRegistry, EngineConfigurationService engineConfigurationService, Clock clock) {
         this.engineRegistry = engineRegistry;
+        this.engineConfigurationService = engineConfigurationService;
         this.clock = clock;
     }
 
@@ -46,7 +48,7 @@ public class TaskSupervisor {
         AtomicBoolean reviewerFailed = new AtomicBoolean(false);
         AtomicBoolean timedOut = new AtomicBoolean(false);
 
-        AiEngine engine = engineRegistry.require(AiEngineKind.OPENAI_CODEX);
+        AiEngine engine = engineRegistry.require(AiEngineKind.OPENCODE);
         try (var scope = StructuredTaskScope.<TaskSideResult>open()) {
             var primary = scope.fork(() -> executeSide(
                 engine,
@@ -123,7 +125,7 @@ public class TaskSupervisor {
                         ? "Primary implementation stream. Prefer concrete delivery."
                         : "Reviewer stream. Focus on defects, cost, and missing edge cases.",
                     ".",
-                    Duration.ofMinutes(15),
+                    Duration.ofSeconds(engineConfigurationService.timeoutSeconds()),
                     () -> cancelled.getAsBoolean() || timedOut.get() || (role == SupervisorRole.REVIEWER && peerFailed.get())
                 ),
                 new EngineExecutionObserver() {

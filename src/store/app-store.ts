@@ -13,6 +13,8 @@ import {
   type PromptMessageView,
   type PromptTaskSnapshot,
   type QueueSnapshot,
+  type SkillDefinitionView,
+  type SkillMatchSnapshot,
   type SupervisorSnapshot,
   type TaskChunkEvent,
   type TaskProgressEvent,
@@ -31,6 +33,8 @@ type AppState = {
   budget: BudgetSnapshot;
   settings: AppSettings;
   engineStatuses: EngineStatusSnapshot[];
+  skills: SkillDefinitionView[];
+  skillMatchPreview: SkillMatchSnapshot | null;
   searchResult: HistorySearchResult | null;
   composerDraft: string;
   composerWorkspacePath: string | null;
@@ -54,6 +58,8 @@ type AppState = {
   applyBudget: (payload: BudgetSnapshot) => void;
   applySettings: (payload: AppSettings) => void;
   setEngineStatuses: (payload: EngineStatusSnapshot[]) => void;
+  setSkills: (payload: SkillDefinitionView[]) => void;
+  setSkillMatchPreview: (payload: SkillMatchSnapshot | null) => void;
   applyHistoryMessage: (payload: PromptMessageView) => void;
   setSearchResult: (payload: HistorySearchResult | null) => void;
 };
@@ -80,6 +86,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   budget: EMPTY_BUDGET,
   settings: EMPTY_SETTINGS,
   engineStatuses: [],
+  skills: [],
+  skillMatchPreview: null,
   searchResult: null,
   composerDraft: "",
   composerWorkspacePath: null,
@@ -131,6 +139,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
   applyTaskProgress: (payload) =>
     set((state) => {
+      const existingProgress = state.progressByTask[payload.taskId];
+      if (existingProgress && existingProgress.updatedAt > payload.updatedAt) {
+        return {};
+      }
+
       const current = state.tasks[payload.taskId];
 
       return {
@@ -148,7 +161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   stage: payload.stage,
                   progress: payload.progress,
                   errorMessage:
-                    payload.status === "FAILED"
+                    payload.status === "FAILED" || payload.status === "CANCELED"
                       ? payload.summary
                       : current.errorMessage,
                 },
@@ -181,6 +194,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   applyBudget: (payload) => set({ budget: payload }),
   applySettings: (payload) => set({ settings: payload }),
   setEngineStatuses: (engineStatuses) => set({ engineStatuses }),
+  setSkills: (skills) => set({ skills }),
+  setSkillMatchPreview: (skillMatchPreview) => set({ skillMatchPreview }),
   applyHistoryMessage: (payload) =>
     set((state) => {
       const current = state.messagesBySession[payload.sessionId] ?? [];

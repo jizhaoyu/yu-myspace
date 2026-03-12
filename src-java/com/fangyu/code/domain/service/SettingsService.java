@@ -1,10 +1,12 @@
 package com.fangyu.code.domain.service;
 
 import java.time.Clock;
+import java.util.List;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fangyu.code.config.FangyuProperties;
 import com.fangyu.code.shared.dto.AppSettings;
@@ -43,19 +45,21 @@ public class SettingsService {
         }
 
         try {
+            JsonNode root = objectMapper.readTree(json);
             AppSettings loaded = objectMapper.readValue(json, AppSettings.class);
             AppSettings defaults = defaults();
             return new AppSettings(
                 loaded.theme() == null ? defaults.theme() : loaded.theme(),
                 loaded.defaultEngine() == null ? defaults.defaultEngine() : loaded.defaultEngine(),
                 loaded.autostartEnabled(),
-                loaded.sessionBudgetUsd(),
-                loaded.weeklyBudgetUsd(),
-                loaded.claudeExecutable() == null ? defaults.claudeExecutable() : loaded.claudeExecutable(),
-                loaded.geminiExecutable() == null ? defaults.geminiExecutable() : loaded.geminiExecutable(),
+                loaded.sessionBudgetUsd() <= 0 ? defaults.sessionBudgetUsd() : loaded.sessionBudgetUsd(),
+                loaded.weeklyBudgetUsd() <= 0 ? defaults.weeklyBudgetUsd() : loaded.weeklyBudgetUsd(),
                 loaded.codexEndpoint() == null ? defaults.codexEndpoint() : loaded.codexEndpoint(),
                 loaded.codexModel() == null ? defaults.codexModel() : loaded.codexModel(),
-                loaded.codexApiKey() == null ? defaults.codexApiKey() : loaded.codexApiKey()
+                loaded.codexApiKey() == null ? defaults.codexApiKey() : loaded.codexApiKey(),
+                root != null && root.has("skillsEnabled") ? loaded.skillsEnabled() : defaults.skillsEnabled(),
+                loaded.disabledSkillIds() == null ? List.of() : loaded.disabledSkillIds(),
+                loaded.manualSkillIds() == null ? List.of() : loaded.manualSkillIds()
             );
         } catch (Exception exception) {
             return defaults();
@@ -89,11 +93,12 @@ public class SettingsService {
             false,
             properties.getBudgets().getSessionUsd(),
             properties.getBudgets().getWeeklyUsd(),
-            properties.getEngines().getClaude().getExecutable(),
-            properties.getEngines().getGemini().getExecutable(),
             properties.getEngines().getCodex().getEndpoint(),
             properties.getEngines().getCodex().getModel(),
-            properties.getEngines().getCodex().getApiKey()
+            properties.getEngines().getCodex().getApiKey(),
+            true,
+            List.of(),
+            List.of()
         );
     }
 }

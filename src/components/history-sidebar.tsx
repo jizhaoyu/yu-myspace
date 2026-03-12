@@ -13,24 +13,30 @@ type HistorySidebarProps = {
   sessionId: string;
   sessions: ConversationSessionView[];
   messages: PromptMessageView[];
+  sessionPending: boolean;
+  sessionError: string | null;
   searchQuery: string;
   searchPending: boolean;
   searchResult: HistorySearchResult | null;
   onSearchQueryChange: (value: string) => void;
   onSelectSession: (sessionId: string) => void;
   onRefreshSession: (sessionId: string) => void;
+  refreshPending: boolean;
 };
 
 export function HistorySidebar({
   sessionId,
   sessions,
   messages,
+  sessionPending,
+  sessionError,
   searchQuery,
   searchPending,
   searchResult,
   onSearchQueryChange,
   onSelectSession,
   onRefreshSession,
+  refreshPending,
 }: HistorySidebarProps) {
   const recentMessages = [...messages].slice(-4).reverse();
 
@@ -105,7 +111,15 @@ export function HistorySidebar({
             <Badge tone="neutral">{sessions.length}</Badge>
           </div>
           <div className="custom-scrollbar max-h-[280px] space-y-2 overflow-y-auto pr-1">
-            {sessions.length ? (
+            {sessionError ? (
+              <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-6 text-center text-sm text-rose-100">
+                {sessionError}
+              </div>
+            ) : sessionPending && !sessions.length ? (
+              <div className="rounded-2xl border border-white/10 bg-white/4 px-4 py-6 text-center text-sm text-slate-400">
+                正在加载会话...
+              </div>
+            ) : sessions.length ? (
               sessions.map((item) => {
                 const active = item.id === sessionId;
 
@@ -145,7 +159,12 @@ export function HistorySidebar({
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="text-sm font-medium text-slate-100">当前会话最近消息</div>
             {sessionId ? (
-              <Button size="sm" variant="ghost" onClick={() => onRefreshSession(sessionId)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={refreshPending}
+                onClick={() => onRefreshSession(sessionId)}
+              >
                 刷新
               </Button>
             ) : null}

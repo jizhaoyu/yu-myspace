@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.fangyu.code.domain.engine.AiEngine;
@@ -13,6 +15,7 @@ import com.fangyu.code.domain.engine.EngineExecutionRequest;
 import com.fangyu.code.domain.engine.EngineExecutionResult;
 import com.fangyu.code.domain.model.QueuedPromptTask;
 import com.fangyu.code.shared.dto.PromptMessageView;
+import com.fangyu.code.shared.dto.SkillMatchSnapshot;
 import com.fangyu.code.shared.dto.SupervisorSnapshot;
 import com.fangyu.code.shared.dto.TaskChunkEvent;
 import com.fangyu.code.shared.dto.TaskProgressEvent;
@@ -20,11 +23,15 @@ import com.fangyu.code.shared.dto.TaskProgressEvent;
 @Service
 public class PromptExecutionService {
 
+    private static final Logger logger = LoggerFactory.getLogger(PromptExecutionService.class);
+
     private final AiEngineRegistry engineRegistry;
     private final HistoryService historyService;
     private final ContextCompressionService contextCompressionService;
     private final TaskContextAttachmentService taskContextAttachmentService;
     private final DualCodexTask dualCodexTask;
+    private final EngineConfigurationService engineConfigurationService;
+    private final SkillService skillService;
     private final Clock clock;
 
     public PromptExecutionService(
@@ -33,6 +40,8 @@ public class PromptExecutionService {
         ContextCompressionService contextCompressionService,
         TaskContextAttachmentService taskContextAttachmentService,
         DualCodexTask dualCodexTask,
+        EngineConfigurationService engineConfigurationService,
+        SkillService skillService,
         Clock clock
     ) {
         this.engineRegistry = engineRegistry;
@@ -40,6 +49,8 @@ public class PromptExecutionService {
         this.contextCompressionService = contextCompressionService;
         this.taskContextAttachmentService = taskContextAttachmentService;
         this.dualCodexTask = dualCodexTask;
+        this.engineConfigurationService = engineConfigurationService;
+        this.skillService = skillService;
         this.clock = clock;
     }
 
@@ -68,9 +79,31 @@ public class PromptExecutionService {
         var messages = historyService.messages(task.sessionId());
         var context = contextCompressionService.buildWindow(messages);
         String attachmentContext = taskContextAttachmentService.renderContextBlock(task.workspacePath(), task.contextFiles());
+        SkillService.PromptInjectionPlan injectionPlan = skillService.injectPrompt(task.prompt());
+        SkillMatchSnapshot skillMatch = injectionPlan.snapshot();
+        String effectiveUserPrompt = injectionPlan.prompt();
+        logger.info(
+            "task skill injection id={} injected={} applied={} auto={} manual={}",
+            task.taskId(),
+            skillMatch.injected(),
+            skillMatch.appliedSkillIds(),
+            skillMatch.autoMatchedSkillIds(),
+            skillMatch.manualSkillIds()
+        );
 
         if (task.dualMode()) {
-            var result = dualCodexTask.execute(task, context, progressSink, chunkSink, supervisorSink, cancelled);
+            QueuedPromptTask effectiveTask = new QueuedPromptTask(
+                task.taskId(),
+                task.sessionId(),
+                effectiveUserPrompt,
+                task.workspacePath(),
+                task.contextFiles(),
+                task.engine(),
+                task.priority(),
+                task.insertMode(),
+                task.dualMode()
+            );
+            var result = dualCodexTask.execute(effectiveTask, context, progressSink, chunkSink, supervisorSink, cancelled);
             historyService.appendAssistantMessage(
                 task.sessionId(),
                 task.taskId(),
@@ -94,7 +127,8 @@ public class PromptExecutionService {
                 result.combinedContent(),
                 result.totalInputTokens(),
                 result.totalOutputTokens(),
-                result.totalCostUsd()
+                result.totalCostUsd(),
+                skillMatch
             );
         }
 
@@ -111,7 +145,7 @@ public class PromptExecutionService {
             """.formatted(
             context.renderForModel(),
             attachmentContext.isBlank() ? "[none]" : attachmentContext,
-            task.prompt()
+            effectiveUserPrompt
         );
 
         EngineExecutionResult result = engine.execute(
@@ -121,7 +155,7 @@ public class PromptExecutionService {
                 fullPrompt,
                 "You are Fangyu Code's active AI engine. Give concise, implementation-first guidance.",
                 ".",
-                Duration.ofMinutes(15),
+                Duration.ofSeconds(engineConfigurationService.timeoutSeconds()),
                 cancelled
             ),
             new EngineExecutionObserver() {
@@ -186,11 +220,21 @@ public class PromptExecutionService {
             "persist-history",
             clock.millis()
         ));
+        logger.info(
+            "task engine execution finished id={} engine={} inputTokens={} outputTokens={} cost={} durationMs={}",
+            task.taskId(),
+            task.engine(),
+            result.inputTokens(),
+            result.outputTokens(),
+            result.costUsd(),
+            result.durationMs()
+        );
         return new ExecutionReport(
             result.content(),
             result.inputTokens(),
             result.outputTokens(),
-            result.costUsd()
+            result.costUsd(),
+            skillMatch
         );
     }
 
@@ -198,6 +242,7 @@ public class PromptExecutionService {
         String content,
         int inputTokens,
         int outputTokens,
-        double costUsd
+        double costUsd,
+        SkillMatchSnapshot skillMatch
     ) {}
 }

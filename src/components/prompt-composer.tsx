@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { FileStack, FolderSearch, Layers3, PencilLine, Send, Split, Wand2, X } from "lucide-react";
 
 import { Badge, Button, FieldLabel, Input, Panel, Textarea, Toggle } from "@/components/ui";
+import { SkillList } from "@/components/skill-list";
 import {
   type AppSettings,
   type BatchPromptRequest,
   type EditQueuedTaskRequest,
   type PromptTaskSnapshot,
+  type SkillDefinitionView,
+  type SkillMatchSnapshot,
+  type SkillSettingsUpdateRequest,
   type SubmitPromptRequest,
 } from "@/lib/types";
 import { engineLabel, parseOptionalNumber } from "@/lib/utils";
@@ -32,13 +36,18 @@ type PromptComposerProps = {
   onChooseContextFiles: () => void;
   chooseWorkspacePending: boolean;
   chooseContextFilesPending: boolean;
+  skills: SkillDefinitionView[];
+  skillMatchPreview: SkillMatchSnapshot | null;
+  skillSettingsPending: boolean;
+  onRefreshSkills: () => void;
+  onUpdateSkillSettings: (payload: SkillSettingsUpdateRequest) => void;
   onSubmitPrompt: (payload: SubmitPromptRequest) => void;
   onSubmitBatch: (payload: BatchPromptRequest) => void;
   onEditQueuedTask: (payload: EditQueuedTaskRequest) => void;
   onCancelEdit: () => void;
 };
 
-const ENGINE_OPTIONS = ["OPENAI_CODEX", "CLAUDE_CODE", "GEMINI"] as const;
+const ENGINE_OPTIONS = ["OPENCODE"] as const;
 
 function splitBatchPrompts(value: string) {
   return value
@@ -68,6 +77,11 @@ export function PromptComposer({
   onChooseContextFiles,
   chooseWorkspacePending,
   chooseContextFilesPending,
+  skills,
+  skillMatchPreview,
+  skillSettingsPending,
+  onRefreshSkills,
+  onUpdateSkillSettings,
   onSubmitPrompt,
   onSubmitBatch,
   onEditQueuedTask,
@@ -307,6 +321,46 @@ export function PromptComposer({
             <div>Workspace {workspacePath || "none"}</div>
             <div>Files {contextFiles.length}</div>
           </div>
+        </div>
+
+        <div className="rounded-[24px] border border-white/8 bg-slate-950/38 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-slate-100">Skills 注入</div>
+              <div className="text-xs text-slate-400">自动匹配 + 手动多选叠加（最多 4 个）。</div>
+            </div>
+            <Button size="sm" variant="ghost" type="button" loading={skillSettingsPending} onClick={onRefreshSkills}>
+              刷新技能
+            </Button>
+          </div>
+
+          <div className="mb-3">
+            <Toggle
+              checked={settings.skillsEnabled}
+              onPressedChange={(next) => onUpdateSkillSettings({ skillsEnabled: next })}
+              label="启用 Skills"
+            />
+          </div>
+
+          {settings.skillsEnabled ? (
+            <>
+              <div className="mb-3 rounded-2xl border border-white/8 bg-white/4 p-3 text-xs text-slate-300">
+                <div>自动命中：{skillMatchPreview?.autoMatchedSkillIds.join(", ") || "无"}</div>
+                <div>手动叠加：{settings.manualSkillIds.join(", ") || "无"}</div>
+                <div>最终注入：{skillMatchPreview?.appliedSkillIds.join(", ") || "无"}</div>
+              </div>
+
+              <div className="mt-2">
+                <SkillList
+                  skills={skills}
+                  settings={settings}
+                  match={skillMatchPreview}
+                  pending={skillSettingsPending}
+                  onUpdate={onUpdateSkillSettings}
+                />
+              </div>
+            </>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">

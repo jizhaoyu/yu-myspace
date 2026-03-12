@@ -1,11 +1,20 @@
 package com.fangyu.code.domain.model;
 
 public enum AiEngineKind {
-    CLAUDE_CODE,
-    OPENAI_CODEX,
-    GEMINI;
+    OPENCODE;
 
     public static AiEngineKind from(String value) {
-        return value == null ? OPENAI_CODEX : AiEngineKind.valueOf(value.trim().toUpperCase());
+        if (value == null || value.isBlank()) {
+            return OPENCODE;
+        }
+
+        String normalized = value.trim().toUpperCase();
+        if ("OPENCODE".equals(normalized)
+            || "OPENAI_CODEX".equals(normalized)
+            || "CLAUDE_CODE".equals(normalized)
+            || "GEMINI".equals(normalized)) {
+            return OPENCODE;
+        }
+        return AiEngineKind.valueOf(normalized);
     }
 }

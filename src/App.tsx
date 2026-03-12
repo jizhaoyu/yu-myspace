@@ -6,11 +6,13 @@ import { AlertTriangle, RefreshCcw } from "lucide-react";
 import { BudgetHeader } from "@/components/budget-header";
 import { HistorySidebar } from "@/components/history-sidebar";
 import { MessageStream } from "@/components/message-stream";
+import { McpPanel } from "@/components/mcp-panel";
 import { PromptComposer } from "@/components/prompt-composer";
 import { QueuePanel } from "@/components/queue-panel";
 import { SupervisorPanel } from "@/components/supervisor-panel";
 import { Button, Panel } from "@/components/ui";
 import { desktopApi, desktopEvents } from "@/lib/desktop";
+import { getErrorMessage } from "@/lib/errors";
 import {
   type AppSettings,
   type PromptTaskSnapshot,
@@ -23,14 +25,6 @@ type Notice = {
   text: string;
 };
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "桌面桥接返回了未知错误。";
-}
-
 export default function App() {
   const queryClient = useQueryClient();
   const [requestedSessionId, setRequestedSessionId] = useState<string>();
@@ -38,6 +32,9 @@ export default function App() {
   const [historyQuery, setHistoryQuery] = useState("");
   const deferredHistoryQuery = useDeferredValue(historyQuery.trim());
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [sessionRefreshPending, setSessionRefreshPending] = useState(false);
+  const [sessionRefreshError, setSessionRefreshError] = useState<string | null>(null);
+  const lastBudgetLevel = useRef<string | null>(null);
   const latestHistoryQuery = useRef("");
 
   const sessionId = useAppStore((state) => state.sessionId);
@@ -51,6 +48,8 @@ export default function App() {
   const budget = useAppStore((state) => state.budget);
   const settings = useAppStore((state) => state.settings);
   const engineStatuses = useAppStore((state) => state.engineStatuses);
+  const skills = useAppStore((state) => state.skills);
+  const skillMatchPreview = useAppStore((state) => state.skillMatchPreview);
   const searchResult = useAppStore((state) => state.searchResult);
   const composerDraft = useAppStore((state) => state.composerDraft);
   const composerWorkspacePath = useAppStore((state) => state.composerWorkspacePath);
@@ -75,6 +74,8 @@ export default function App() {
   const applyBudget = useAppStore((state) => state.applyBudget);
   const applySettings = useAppStore((state) => state.applySettings);
   const setEngineStatuses = useAppStore((state) => state.setEngineStatuses);
+  const setSkills = useAppStore((state) => state.setSkills);
+  const setSkillMatchPreview = useAppStore((state) => state.setSkillMatchPreview);
   const applyHistoryMessage = useAppStore((state) => state.applyHistoryMessage);
   const setSearchResult = useAppStore((state) => state.setSearchResult);
 
@@ -88,6 +89,21 @@ export default function App() {
     queryFn: () => desktopApi.engineStatuses(),
   });
 
+  const skillsQuery = useQuery({
+    queryKey: ["skills"],
+    queryFn: () => desktopApi.listSkills(),
+  });
+
+  const skillMatchQuery = useQuery({
+    queryKey: ["skills", "preview", composerDraft],
+    queryFn: () => desktopApi.previewSkillMatch(composerDraft),
+  });
+
+  const mcpQuery = useQuery({
+    queryKey: ["mcp-registry"],
+    queryFn: () => desktopApi.listMcpServers(),
+  });
+
   useEffect(() => {
     if (!bootstrapQuery.data) {
       return;
@@ -96,6 +112,8 @@ export default function App() {
     startTransition(() => {
       hydrate(bootstrapQuery.data);
     });
+    setSessionRefreshError(null);
+    setSessionRefreshPending(false);
   }, [bootstrapQuery.data, hydrate]);
 
   useEffect(() => {
@@ -103,6 +121,18 @@ export default function App() {
       setEngineStatuses(engineStatusQuery.data);
     }
   }, [engineStatusQuery.data, setEngineStatuses]);
+
+  useEffect(() => {
+    if (skillsQuery.data) {
+      setSkills(skillsQuery.data);
+    }
+  }, [skillsQuery.data, setSkills]);
+
+  useEffect(() => {
+    if (skillMatchQuery.data) {
+      setSkillMatchPreview(skillMatchQuery.data);
+    }
+  }, [setSkillMatchPreview, skillMatchQuery.data]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -134,7 +164,24 @@ export default function App() {
       desktopEvents.onTaskProgress((payload) => applyTaskProgress(payload)),
       desktopEvents.onTaskChunk((payload) => applyTaskChunk(payload)),
       desktopEvents.onTaskSupervision((payload) => applySupervisor(payload)),
-      desktopEvents.onBudgetUpdated((payload) => applyBudget(payload)),
+      desktopEvents.onBudgetUpdated((payload) => {
+        applyBudget(payload);
+        if (!payload.sessionId) {
+          return;
+        }
+        const nextLevel = payload.level;
+        if (lastBudgetLevel.current !== nextLevel) {
+          lastBudgetLevel.current = nextLevel;
+          if (nextLevel === "YELLOW") {
+            setNotice({ tone: "info", text: "预算使用已接近上限，请注意成本。" });
+            desktopApi.notifyUser("Fangyu Code", "预算使用已接近上限，请注意成本。").catch(() => null);
+          }
+          if (nextLevel === "RED") {
+            setNotice({ tone: "danger", text: "预算已接近或超出上限，请暂停或调整设置。" });
+            desktopApi.notifyUser("Fangyu Code", "预算已接近或超出上限，请暂停或调整设置。").catch(() => null);
+          }
+        }
+      }),
       desktopEvents.onSettingsUpdated((payload) => applySettings(payload)),
       desktopEvents.onHistoryUpdated((payload) => applyHistoryMessage(payload)),
     ];
@@ -354,10 +401,67 @@ export default function App() {
     },
   });
 
+  const { mutate: updateSkillSettings, isPending: skillSettingsPending } = useMutation({
+    mutationFn: desktopApi.updateSkillSettings,
+    onSuccess: (nextSettings) => {
+      applySettings(nextSettings);
+      void queryClient.invalidateQueries({ queryKey: ["skills"] });
+      void queryClient.invalidateQueries({ queryKey: ["skills", "preview"] });
+      setNotice({ tone: "success", text: "Skills 设置已更新。" });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: setMcpServerEnabled, isPending: mcpTogglePending } = useMutation({
+    mutationFn: (payload: { id: string; enabled: boolean }) =>
+      desktopApi.setMcpServerEnabled(payload.id, payload.enabled),
+    onSuccess: (snapshot) => {
+      queryClient.setQueryData(["mcp-registry"], snapshot);
+      setNotice({ tone: "success", text: "MCP 服务状态已更新。" });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: syncMcpToOpenCode, isPending: mcpSyncPending } = useMutation({
+    mutationFn: desktopApi.syncMcpToOpenCode,
+    onSuccess: (snapshot) => {
+      queryClient.setQueryData(["mcp-registry"], snapshot);
+      setNotice({ tone: "success", text: "已同步 MCP 注册表到 OpenCode 配置。" });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: importMcpFromOpenCode, isPending: mcpImportPending } = useMutation({
+    mutationFn: desktopApi.importMcpFromOpenCode,
+    onSuccess: (snapshot) => {
+      queryClient.setQueryData(["mcp-registry"], snapshot);
+      setNotice({ tone: "success", text: "已从 OpenCode 导入 MCP 配置。" });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
   const { mutate: exportSession, isPending: exportPending } = useMutation({
     mutationFn: (currentSessionId: string) => desktopApi.exportSession(currentSessionId),
     onSuccess: (outputPath) => {
       setNotice({ tone: "success", text: `会话已导出到 ${outputPath}` });
+    },
+    onError: (error) => {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    },
+  });
+
+  const { mutate: openLogsDirectory, isPending: openLogsPending } = useMutation({
+    mutationFn: desktopApi.openLogsDirectory,
+    onSuccess: () => {
+      setNotice({ tone: "info", text: "已打开日志目录。" });
     },
     onError: (error) => {
       setNotice({ tone: "danger", text: getErrorMessage(error) });
@@ -386,9 +490,18 @@ export default function App() {
   function handleSessionRefresh(currentSessionId: string) {
     setRequestedSessionId(currentSessionId);
     setSessionId(currentSessionId);
-    bootstrapQuery.refetch().catch((error: unknown) => {
-      setNotice({ tone: "danger", text: getErrorMessage(error) });
-    });
+    setSessionRefreshPending(true);
+    setSessionRefreshError(null);
+    bootstrapQuery
+      .refetch()
+      .catch((error: unknown) => {
+        const message = getErrorMessage(error);
+        setNotice({ tone: "danger", text: message });
+        setSessionRefreshError(message);
+      })
+      .finally(() => {
+        setSessionRefreshPending(false);
+      });
   }
 
   function handleQueueSnapshotRefresh(snapshot?: QueueSnapshot) {
@@ -461,23 +574,28 @@ export default function App() {
             }
           }}
           onSaveSettings={(payload) => saveSettings(payload)}
+          openLogsPending={openLogsPending}
+          onOpenLogsDirectory={() => openLogsDirectory()}
           onRefreshEngineStatuses={() => {
             void engineStatusQuery.refetch();
           }}
         />
 
         <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_380px]">
-          <HistorySidebar
-            sessionId={sessionId}
-            sessions={sessions}
-            messages={currentMessages}
-            searchQuery={historyQuery}
-            searchPending={historySearchPending}
-            searchResult={searchResult}
-            onSearchQueryChange={setHistoryQuery}
-            onSelectSession={handleSessionSelect}
-            onRefreshSession={handleSessionRefresh}
-          />
+            <HistorySidebar
+              sessionId={sessionId}
+              sessions={sessions}
+              messages={currentMessages}
+              sessionPending={bootstrapQuery.isPending}
+              sessionError={sessionRefreshError}
+              searchQuery={historyQuery}
+              searchPending={historySearchPending}
+              searchResult={searchResult}
+              onSearchQueryChange={setHistoryQuery}
+              onSelectSession={handleSessionSelect}
+              onRefreshSession={handleSessionRefresh}
+              refreshPending={sessionRefreshPending}
+            />
 
           <div className="grid gap-4 xl:grid-rows-[minmax(0,1fr)_minmax(0,0.88fr)]">
             <MessageStream
@@ -485,6 +603,15 @@ export default function App() {
               messages={currentMessages}
               tasks={tasks}
               streamingByTask={streamingByTask}
+              onCopyMessage={(content) => {
+                desktopApi.copyToClipboard(content)
+                  .then(() => {
+                    setNotice({ tone: "success", text: "消息已复制到剪贴板。" });
+                  })
+                  .catch((error: unknown) => {
+                    setNotice({ tone: "danger", text: getErrorMessage(error) });
+                  });
+              }}
             />
             <QueuePanel
               queue={queue}
@@ -499,7 +626,7 @@ export default function App() {
             />
           </div>
 
-          <div className="grid gap-4 xl:grid-rows-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="grid gap-4 xl:grid-rows-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
             <PromptComposer
               sessionId={sessionId}
               settings={settings}
@@ -523,6 +650,20 @@ export default function App() {
               onChooseContextFiles={() => chooseContextFiles()}
               chooseWorkspacePending={chooseWorkspacePending}
               chooseContextFilesPending={chooseContextFilesPending}
+              skills={skills}
+              skillMatchPreview={skillMatchPreview}
+              skillSettingsPending={skillSettingsPending || skillsQuery.isFetching}
+              onRefreshSkills={() => {
+                desktopApi.refreshSkills()
+                  .then((payload) => {
+                    setSkills(payload);
+                    setNotice({ tone: "info", text: "技能列表已刷新。" });
+                  })
+                  .catch((error: unknown) => {
+                    setNotice({ tone: "danger", text: getErrorMessage(error) });
+                  });
+              }}
+              onUpdateSkillSettings={(payload) => updateSkillSettings(payload)}
               onSubmitPrompt={submitPrompt}
               onSubmitBatch={submitBatch}
               onEditQueuedTask={editQueuedTask}
@@ -533,6 +674,20 @@ export default function App() {
               tasks={tasks}
               progressByTask={progressByTask}
               activeTaskId={activeTaskId}
+            />
+            <McpPanel
+              snapshot={mcpQuery.data ?? null}
+              pending={mcpQuery.isFetching || mcpTogglePending}
+              syncing={mcpSyncPending}
+              importing={mcpImportPending}
+              onRefresh={() => {
+                mcpQuery.refetch().catch((error: unknown) => {
+                  setNotice({ tone: "danger", text: getErrorMessage(error) });
+                });
+              }}
+              onSync={() => syncMcpToOpenCode()}
+              onImport={() => importMcpFromOpenCode()}
+              onToggleEnabled={(id, enabled) => setMcpServerEnabled({ id, enabled })}
             />
           </div>
         </div>
