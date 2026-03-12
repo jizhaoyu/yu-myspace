@@ -3,20 +3,89 @@ import {
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type InputHTMLAttributes,
+  type LabelHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 import { motion } from "framer-motion";
 import { LoaderCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+export const Dialog = DialogPrimitive.Root;
+export const DialogContent = DialogPrimitive.Content;
+export const DialogHeader = (props: HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn("mb-2 space-y-1", props.className)} {...props} />
+);
+export const DialogTitle = DialogPrimitive.Title;
+export const DialogFooter = (props: HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn("mt-4 flex justify-end gap-2", props.className)} {...props} />
+);
+
 type PanelProps = HTMLAttributes<HTMLElement> & {
   title?: string;
   description?: string;
   actions?: ReactNode;
 };
+
+export type SwitchProps = {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+  id?: string;
+  className?: string;
+};
+
+export function Switch({ checked, onCheckedChange, disabled, id, className }: SwitchProps) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onCheckedChange(!checked)}
+      className={cn(
+        "inline-flex h-7 w-12 items-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/70 disabled:opacity-50",
+        checked
+          ? "border-amber-300/35 bg-amber-400/25"
+          : "border-white/10 bg-slate-900/80",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "ml-0.5 size-5 rounded-full bg-white transition",
+          checked ? "translate-x-5" : "translate-x-0",
+        )}
+      />
+    </button>
+  );
+}
+
+export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
+  return (
+    <label
+      className={cn(
+        "text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export type ToastPayload = {
+  title: string;
+  description?: string;
+  variant?: "destructive" | "default";
+};
+
+export function toast(_payload: ToastPayload) {
+  // lightweight placeholder for now; prevents runtime crash in browser preview
+}
 
 export function Panel({
   title,

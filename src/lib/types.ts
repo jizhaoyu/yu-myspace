@@ -44,7 +44,7 @@ export interface SkillSettingsUpdateRequest {
 
 export interface McpServerSpec {
   transport: "stdio" | "http" | "sse" | string;
-  command: string;
+  command?: string;
   args: string[];
   url: string;
   env: Record<string, string>;

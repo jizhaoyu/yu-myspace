@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 class DatabaseMigrationServiceTest {
@@ -79,7 +80,7 @@ class DatabaseMigrationServiceTest {
         String settingsJson = jdbcClient.sql("SELECT json_value FROM app_setting WHERE setting_key = 'app.settings'")
             .query(String.class)
             .single();
-        Map<String, Object> settings = new ObjectMapper().readValue(settingsJson, Map.class);
+        Map<String, Object> settings = new ObjectMapper().readValue(settingsJson, new TypeReference<Map<String, Object>>() {});
         assertThat(settings.get("defaultEngine")).isEqualTo("OPENCODE");
         assertThat(settings).doesNotContainKeys("claudeExecutable", "geminiExecutable");
     }

@@ -9,7 +9,6 @@ import java.awt.TrayIcon;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -19,6 +18,70 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class DesktopNativeService {
+    // Added methods for file/directory selection (Phase 4)
+
+    /**
+     * Opens a directory chooser dialog for the user to select a workspace directory.
+     * Returns the absolute path of the selected directory, or null if cancelled.
+     */
+    public String chooseWorkspaceDirectory() {
+        try {
+            // Prefer AWT/Swing so we don't require JavaFX on the classpath.
+            // This blocks until the user closes the dialog.
+            javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+            chooser.setDialogTitle("Select Workspace Directory");
+            chooser.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+            chooser.setMultiSelectionEnabled(false);
+
+            int result = chooser.showOpenDialog(null);
+            if (result != javax.swing.JFileChooser.APPROVE_OPTION) {
+                return null;
+            }
+
+            java.io.File selected = chooser.getSelectedFile();
+            return selected != null ? selected.getAbsolutePath() : null;
+        } catch (Throwable t) {
+            logger.warn("Directory chooser failed: {}", t.getMessage());
+            return null;
+        }
+    }
+
+    public java.util.List<String> chooseContextFiles() {
+        try {
+            javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+            chooser.setDialogTitle("Select Files");
+            chooser.setFileSelectionMode(javax.swing.JFileChooser.FILES_ONLY);
+            chooser.setMultiSelectionEnabled(true);
+
+            int result = chooser.showOpenDialog(null);
+            if (result != javax.swing.JFileChooser.APPROVE_OPTION) {
+                return java.util.Collections.emptyList();
+            }
+
+            java.io.File[] files = chooser.getSelectedFiles();
+            if (files == null || files.length == 0) {
+                java.io.File single = chooser.getSelectedFile();
+                if (single == null) {
+                    return java.util.Collections.emptyList();
+                }
+                return java.util.List.of(single.getAbsolutePath());
+            }
+
+            java.util.List<String> paths = new java.util.ArrayList<>();
+            for (java.io.File f : files) {
+                if (f != null) {
+                    paths.add(f.getAbsolutePath());
+                }
+            }
+            return paths;
+        } catch (Throwable t) {
+            logger.warn("File chooser failed: {}", t.getMessage());
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    // Existing methods follow...
+
 
     private static final Logger logger = LoggerFactory.getLogger(DesktopNativeService.class);
     private TrayIcon trayIcon;
