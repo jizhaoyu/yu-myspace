@@ -15,6 +15,11 @@ import jakarta.annotation.PostConstruct;
 @Service
 public class DatabaseMigrationService {
 
+    private static final String PROMPT_MESSAGE_FTS_TABLE = "prompt_message_fts";
+    private static final String PROMPT_MESSAGE_INSERT_TRIGGER = "trg_prompt_message_ai";
+    private static final String PROMPT_MESSAGE_DELETE_TRIGGER = "trg_prompt_message_ad";
+    private static final String PROMPT_MESSAGE_UPDATE_TRIGGER = "trg_prompt_message_au";
+
     private final JdbcClient jdbcClient;
     private final ObjectMapper objectMapper;
 
@@ -38,6 +43,7 @@ public class DatabaseMigrationService {
 
         normalizeEngineValues();
         normalizeSettingsJson();
+        ensurePromptMessageSearchObjects();
     }
 
     private void normalizeEngineValues() {
@@ -108,5 +114,84 @@ public class DatabaseMigrationService {
                 .update();
         } catch (Exception ignored) {
         }
+    }
+
+    private void ensurePromptMessageSearchObjects() {
+        ensureFtsTable();
+        ensureTrigger(
+            PROMPT_MESSAGE_INSERT_TRIGGER,
+            """
+                CREATE TRIGGER trg_prompt_message_ai
+                AFTER INSERT ON prompt_message
+                BEGIN
+                    INSERT INTO prompt_message_fts(message_id, session_id, task_id, role, content)
+                    VALUES (new.id, new.session_id, new.task_id, new.role, new.content);
+                END
+                """
+        );
+        ensureTrigger(
+            PROMPT_MESSAGE_DELETE_TRIGGER,
+            """
+                CREATE TRIGGER trg_prompt_message_ad
+                AFTER DELETE ON prompt_message
+                BEGIN
+                    DELETE FROM prompt_message_fts WHERE message_id = old.id;
+                END
+                """
+        );
+        ensureTrigger(
+            PROMPT_MESSAGE_UPDATE_TRIGGER,
+            """
+                CREATE TRIGGER trg_prompt_message_au
+                AFTER UPDATE ON prompt_message
+                BEGIN
+                    DELETE FROM prompt_message_fts WHERE message_id = old.id;
+                    INSERT INTO prompt_message_fts(message_id, session_id, task_id, role, content)
+                    VALUES (new.id, new.session_id, new.task_id, new.role, new.content);
+                END
+                """
+        );
+    }
+
+    private void ensureFtsTable() {
+        if (sqliteObjectExists("table", PROMPT_MESSAGE_FTS_TABLE)) {
+            return;
+        }
+        jdbcClient.sql("""
+            CREATE VIRTUAL TABLE prompt_message_fts
+            USING fts5(
+                message_id UNINDEXED,
+                session_id UNINDEXED,
+                task_id UNINDEXED,
+                role,
+                content
+            )
+            """).update();
+        jdbcClient.sql("""
+            INSERT INTO prompt_message_fts(message_id, session_id, task_id, role, content)
+            SELECT id, session_id, task_id, role, content
+            FROM prompt_message
+            """).update();
+    }
+
+    private void ensureTrigger(String name, String sql) {
+        if (sqliteObjectExists("trigger", name)) {
+            return;
+        }
+        jdbcClient.sql(sql).update();
+    }
+
+    private boolean sqliteObjectExists(String type, String name) {
+        return jdbcClient.sql("""
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = :type AND name = :name
+            LIMIT 1
+            """)
+            .param("type", type)
+            .param("name", name)
+            .query(Integer.class)
+            .optional()
+            .isPresent();
     }
 }

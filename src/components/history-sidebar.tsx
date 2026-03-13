@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Clock3, Search, Sparkles } from "lucide-react";
+import { Clock3, History, Search, Sparkles } from "lucide-react";
 
 import { Badge, Button, Input, Panel } from "@/components/ui";
 import {
@@ -7,7 +7,7 @@ import {
   type HistorySearchResult,
   type PromptMessageView,
 } from "@/lib/types";
-import { formatRelative, snippet } from "@/lib/utils";
+import { cn, formatRelative, snippet } from "@/lib/utils";
 
 type HistorySidebarProps = {
   sessionId: string;
@@ -38,37 +38,38 @@ export function HistorySidebar({
   onRefreshSession,
   refreshPending,
 }: HistorySidebarProps) {
-  const recentMessages = [...messages].slice(-4).reverse();
+  const recentMessages = [...messages].slice(-5).reverse();
 
   return (
     <Panel
-      title="历史与会话"
-      description="搜索 SQLite 历史记录，并快速切换上下文会话。"
+      title="会话"
+      description="搜索历史记录，并在持久化会话上下文之间切换。"
       className="h-full"
     >
       <div className="space-y-4">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
           <Input
             value={searchQuery}
             onChange={(event) => onSearchQueryChange(event.target.value)}
-            placeholder="搜索历史片段、任务名或输出..."
+            placeholder="搜索提示词、片段或输出内容..."
             className="pl-11"
           />
         </div>
 
         {searchQuery.trim().length >= 2 ? (
-          <div className="rounded-[24px] border border-white/8 bg-slate-950/34 p-3">
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-950/72 p-3">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
-                <Sparkles className="size-4 text-sky-300" />
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                <Sparkles className="size-4 text-sky-400" />
                 搜索结果
               </div>
               <Badge tone="info">
-                {searchPending ? "Searching" : `${searchResult?.hits.length ?? 0} Hits`}
+                {searchPending ? "搜索中" : `${searchResult?.hits.length ?? 0} 条`}
               </Badge>
             </div>
-            <div className="custom-scrollbar max-h-[220px] space-y-2 overflow-y-auto pr-1">
+
+            <div className="custom-scrollbar max-h-[240px] space-y-2 overflow-y-auto pr-1">
               {searchResult?.hits.length ? (
                 searchResult.hits.map((hit, index) => (
                   <motion.button
@@ -78,45 +79,44 @@ export function HistorySidebar({
                     transition={{ delay: index * 0.03 }}
                     type="button"
                     onClick={() => onSelectSession(hit.sessionId)}
-                    className="w-full rounded-2xl border border-white/8 bg-white/4 p-3 text-left transition hover:bg-white/8"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 p-3 text-left transition-all hover:border-zinc-700 hover:bg-zinc-900"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                      <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
                         {hit.role}
                       </div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-zinc-500">
                         {formatRelative(hit.createdAt)}
                       </div>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-100">
-                      {hit.snippet}
-                    </p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-100">{hit.snippet}</p>
                   </motion.button>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
-                  {searchPending ? "正在检索历史..." : "未找到匹配内容。"}
+                <div className="rounded-xl border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-400">
+                  {searchPending ? "正在搜索历史记录..." : "未找到匹配内容。"}
                 </div>
               )}
             </div>
-          </div>
+          </section>
         ) : null}
 
-        <div className="rounded-[24px] border border-white/8 bg-slate-950/34 p-3">
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/72 p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-100">
-              <Clock3 className="size-4 text-amber-300" />
+            <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+              <History className="size-4 text-amber-400" />
               会话列表
             </div>
             <Badge tone="neutral">{sessions.length}</Badge>
           </div>
-          <div className="custom-scrollbar max-h-[280px] space-y-2 overflow-y-auto pr-1">
+
+          <div className="custom-scrollbar max-h-[320px] space-y-2 overflow-y-auto pr-1">
             {sessionError ? (
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-6 text-center text-sm text-rose-100">
+              <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-6 text-center text-sm text-rose-200">
                 {sessionError}
               </div>
             ) : sessionPending && !sessions.length ? (
-              <div className="rounded-2xl border border-white/10 bg-white/4 px-4 py-6 text-center text-sm text-slate-400">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-4 py-6 text-center text-sm text-zinc-400">
                 正在加载会话...
               </div>
             ) : sessions.length ? (
@@ -128,36 +128,43 @@ export function HistorySidebar({
                     key={item.id}
                     type="button"
                     onClick={() => onSelectSession(item.id)}
-                    className={`w-full rounded-2xl border p-3 text-left transition ${
+                    className={cn(
+                      "w-full rounded-xl border p-3 text-left transition-all",
                       active
-                        ? "border-sky-300/25 bg-sky-400/10"
-                        : "border-white/8 bg-white/4 hover:bg-white/8"
-                    }`}
+                        ? "border-sky-500/30 bg-sky-500/10 shadow-[0_0_0_1px_rgba(14,165,233,0.08)_inset]"
+                        : "border-zinc-800 bg-zinc-900/80 hover:border-zinc-700 hover:bg-zinc-900",
+                    )}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-slate-100">
-                        {snippet(item.title || "未命名会话", 40)}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-zinc-100">
+                          {snippet(item.title || "未命名会话", 40)}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
+                          <span>{item.activeEngine}</span>
+                          <span className="size-1 rounded-full bg-zinc-700" />
+                          <span>{formatRelative(item.updatedAt)}</span>
+                        </div>
                       </div>
-                      {active ? <Badge tone="info">Current</Badge> : null}
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
-                      <span>{item.activeEngine}</span>
-                      <span>{formatRelative(item.updatedAt)}</span>
+                      {active ? <Badge tone="info">当前</Badge> : null}
                     </div>
                   </button>
                 );
               })
             ) : (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
-                还没有历史会话。
+              <div className="rounded-xl border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-400">
+                暂无会话。
               </div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-[24px] border border-white/8 bg-slate-950/34 p-3">
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/72 p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="text-sm font-medium text-slate-100">当前会话最近消息</div>
+            <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+              <Clock3 className="size-4 text-zinc-400" />
+              最近消息
+            </div>
             {sessionId ? (
               <Button
                 size="sm"
@@ -169,28 +176,29 @@ export function HistorySidebar({
               </Button>
             ) : null}
           </div>
+
           <div className="space-y-2">
             {recentMessages.length ? (
               recentMessages.map((message) => (
                 <div
                   key={message.id}
-                  className="rounded-2xl border border-white/8 bg-white/4 p-3"
+                  className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-3"
                 >
-                  <div className="mb-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                  <div className="mb-1 text-[11px] uppercase tracking-[0.2em] text-zinc-500">
                     {message.role}
                   </div>
-                  <p className="text-sm leading-6 text-slate-200">
-                    {snippet(message.content, 120)}
+                  <p className="text-sm leading-6 text-zinc-100">
+                    {snippet(message.content, 132)}
                   </p>
                 </div>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
-                该会话还没有持久化消息。
+              <div className="rounded-xl border border-dashed border-zinc-800 px-4 py-8 text-center text-sm text-zinc-400">
+                这个会话还没有持久化消息。
               </div>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </Panel>
   );

@@ -54,4 +54,60 @@ class McpRegistryServiceTest {
         assertThat(opencodeJson).contains("filesystem");
         assertThat(opencodeJson).contains("mcpServers");
     }
+
+    @Test
+    void importFromOpenCodeShouldKeepDisabledAndMetadataButUpdateSpec() throws Exception {
+        Path tmp = Files.createTempDirectory("fangyu-mcp-import-test-");
+        Path registry = tmp.resolve("mcp-registry.json");
+        Path opencode = tmp.resolve("opencode-mcp.json");
+
+        FangyuProperties properties = new FangyuProperties();
+        properties.getMcp().setRegistryPath(registry.toString());
+        properties.getMcp().setOpencodeConfigPath(opencode.toString());
+
+        McpRegistryService service = new McpRegistryService(
+            new ObjectMapper(),
+            properties,
+            Clock.fixed(Instant.parse("2026-03-12T10:15:30Z"), ZoneOffset.UTC)
+        );
+
+        service.upsert(new McpUpsertRequest(
+            "server-one",
+            "Server One",
+            new McpServerSpec("stdio", "oldcmd", List.of("--old"), "", Map.of(), null),
+            false,
+            List.of("opencode"),
+            "keep-description",
+            List.of("keep-tag")
+        ));
+
+        Files.writeString(
+            opencode,
+            """
+            {
+              \"mcpServers\": {
+                \"server-one\": {
+                  \"transport\": \"stdio\",
+                  \"command\": \"newcmd\",
+                  \"args\": [\"--new\"]
+                }
+              }
+            }
+            """
+        );
+
+        service.importFromOpenCode();
+
+        var snapshot = service.snapshot();
+        assertThat(snapshot.servers()).hasSize(1);
+        var entry = snapshot.servers().getFirst();
+        assertThat(entry.id()).isEqualTo("server-one");
+        assertThat(entry.enabled()).isFalse();
+        assertThat(entry.name()).isEqualTo("Server One");
+        assertThat(entry.description()).isEqualTo("keep-description");
+        assertThat(entry.tags()).containsExactly("keep-tag");
+        assertThat(entry.targetApps()).contains("opencode");
+        assertThat(entry.spec().command()).isEqualTo("newcmd");
+        assertThat(entry.spec().args()).containsExactly("--new");
+    }
 }

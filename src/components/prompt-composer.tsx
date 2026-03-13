@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { FileStack, FolderSearch, Layers3, PencilLine, Send, Split, Wand2, X } from "lucide-react";
+import {
+  FileStack,
+  FolderSearch,
+  Layers3,
+  PencilLine,
+  Send,
+  Split,
+  Wand2,
+  X,
+} from "lucide-react";
 
 import { Badge, Button, FieldLabel, Input, Panel, Textarea, Toggle } from "@/components/ui";
 import { SkillList } from "@/components/skill-list";
@@ -56,6 +65,26 @@ function splitBatchPrompts(value: string) {
     .filter(Boolean);
 }
 
+function ContextShell({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950/72 p-4">
+      <div className="mb-3">
+        <div className="text-sm font-medium text-zinc-100">{title}</div>
+        {caption ? <div className="mt-1 text-xs text-zinc-400">{caption}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function PromptComposer({
   sessionId,
   settings,
@@ -103,11 +132,11 @@ export function PromptComposer({
 
   return (
     <Panel
-      title={editingTask ? "编辑待执行任务" : "Prompt Composer"}
-      description="支持单条、批量、插队和双路监督。默认模型与预算继承全局设置。"
+      title={editingTask ? "编辑排队任务" : "编排"}
+      description="在当前工作区内编写提示词、附加项目上下文，并控制执行模式。"
       actions={
         <div className="flex items-center gap-2">
-          {editingTask ? <Badge tone="warning">Editing</Badge> : null}
+          {editingTask ? <Badge tone="warning">编辑中</Badge> : null}
           <Badge tone="accent">{engineLabel(engine)}</Badge>
         </div>
       }
@@ -163,204 +192,256 @@ export function PromptComposer({
           });
         }}
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <FieldLabel>目标引擎</FieldLabel>
-            <select
-              value={engine}
-              disabled={!!editingTask}
-              onChange={(event) => setEngine(event.target.value)}
-              className="h-11 w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 text-sm text-slate-100 outline-none transition focus:border-sky-300/45 focus:ring-2 focus:ring-sky-300/20 disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              {ENGINE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {engineLabel(option)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <FieldLabel>优先级</FieldLabel>
-            <Input
-              inputMode="numeric"
-              value={priority}
-              onChange={(event) => setPriority(event.target.value)}
-              placeholder="默认 50，数值越大越靠前"
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Toggle
-            checked={batchMode}
-            onPressedChange={(next) => {
-              onBatchModeChange(next);
-              if (next) {
-                onDualModeChange(false);
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_360px]">
+          <div className="space-y-4">
+            <ContextShell
+              title="提示词主体"
+              caption={
+                batchMode
+                  ? "批量模式下，每一行都会作为一个独立任务提交。"
+                  : "描述编码任务、约束条件、验收标准和预期输出。"
               }
-            }}
-            disabled={!!editingTask}
-            label="批量提交"
-          />
-          <Toggle
-            checked={insertMode}
-            onPressedChange={onInsertModeChange}
-            label="插队模式"
-          />
-          <Toggle
-            checked={dualMode}
-            onPressedChange={onDualModeChange}
-            disabled={batchMode || !!editingTask}
-            label="双路监督"
-          />
-        </div>
-
-        <div className="grid gap-3 rounded-[24px] border border-white/8 bg-slate-950/38 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-medium text-slate-100">项目与文件上下文</div>
-              <div className="text-xs text-slate-400">选择工作区目录，并附加本次任务需要参考的文件。</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="ghost" loading={chooseWorkspacePending} onClick={onChooseWorkspace}>
-                <FolderSearch className="size-3.5" />
-                选择项目
-              </Button>
-              <Button type="button" size="sm" variant="ghost" loading={chooseContextFilesPending} onClick={onChooseContextFiles}>
-                <FileStack className="size-3.5" />
-                附加文件
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
-              <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">Workspace</div>
-              <div className="flex items-start justify-between gap-2">
-                <p className="break-all text-sm leading-6 text-slate-200">{workspacePath || "未选择项目目录"}</p>
-                {workspacePath ? (
-                  <button
-                    type="button"
-                    className="rounded-full p-1 text-slate-400 transition hover:bg-white/8 hover:text-slate-100"
-                    onClick={() => onWorkspacePathChange(null)}
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                ) : null}
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-400">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="size-3.5 text-amber-400" />
+                  {editingTask
+                    ? "正在编辑已排队任务"
+                    : batchMode
+                      ? "已启用批量模式"
+                      : "当前为单任务模式"}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>{promptCount} 个任务</span>
+                  <span>{draft.trim().length} 字符</span>
+                  <span>{contextFiles.length} 个文件</span>
+                </div>
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
-              <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">Attached Files</div>
-              {contextFiles.length ? (
-                <div className="space-y-2">
-                  {contextFiles.map((filePath) => (
-                    <div key={filePath} className="flex items-start justify-between gap-2 rounded-xl bg-slate-950/45 px-3 py-2 text-xs text-slate-300">
-                      <span className="break-all">{filePath}</span>
+              <Textarea
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                placeholder={
+                  batchMode
+                    ? "每行一个提示词，适合批量重构、检查或生成任务。"
+                    : "说明你希望编码代理完成什么，包括文件范围、约束条件和完成标准。"
+                }
+                className="min-h-[320px]"
+              />
+            </ContextShell>
+
+            <ContextShell
+              title="项目上下文"
+              caption="绑定工作区并附加参考文件，提升执行质量。"
+            >
+              <div className="mb-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  loading={chooseWorkspacePending}
+                  onClick={onChooseWorkspace}
+                >
+                  <FolderSearch className="size-3.5" />
+                  选择工作区
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  loading={chooseContextFilesPending}
+                  onClick={onChooseContextFiles}
+                >
+                  <FileStack className="size-3.5" />
+                  附加文件
+                </Button>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                  <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
+                    工作区
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="break-all text-sm leading-6 text-zinc-100">
+                      {workspacePath || "尚未选择工作区"}
+                    </p>
+                    {workspacePath ? (
                       <button
                         type="button"
-                        className="rounded-full p-1 text-slate-500 transition hover:bg-white/8 hover:text-slate-100"
-                        onClick={() => onContextFilesChange(contextFiles.filter((item) => item !== filePath))}
+                        className="rounded-full p-1 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"
+                        onClick={() => onWorkspacePathChange(null)}
                       >
                         <X className="size-3.5" />
                       </button>
-                    </div>
-                  ))}
+                    ) : null}
+                  </div>
                 </div>
-              ) : (
-                <div className="text-sm text-slate-400">未附加上下文文件</div>
-              )}
-            </div>
-          </div>
-        </div>
 
-        <div className="rounded-[24px] border border-white/8 bg-slate-950/38 p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <div className="flex items-center gap-2">
-              <Wand2 className="size-3.5 text-amber-300" />
-              {editingTask
-                ? "仅允许修改排队中的 Prompt、优先级和插队状态。"
-                : batchMode
-                  ? "批量模式按行拆分 Prompt。"
-                  : "单条模式支持双路监督和流式跟踪。"}
-            </div>
-            <div className="flex items-center gap-3">
-              <span>{promptCount} 条任务</span>
-              <span>{draft.trim().length} chars</span>
-              <span>{contextFiles.length} files</span>
-            </div>
-          </div>
-          <Textarea
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            placeholder={
-              batchMode
-                ? "每行一个 Prompt，适合批量生成、修复或审查请求。"
-                : "描述你的编码任务、上下文约束和验收标准。"
-            }
-          />
-        </div>
-
-        <div className="grid gap-3 rounded-[24px] border border-white/8 bg-slate-950/38 p-4 text-sm text-slate-300">
-          <div className="flex items-center gap-2 font-medium text-slate-100">
-            {editingTask ? (
-              <PencilLine className="size-4 text-amber-300" />
-            ) : batchMode ? (
-              <Layers3 className="size-4 text-sky-300" />
-            ) : (
-              <Split className="size-4 text-emerald-300" />
-            )}
-            执行摘要
-          </div>
-          <div className="grid gap-2 text-xs leading-6 text-slate-400">
-            <div>Session {sessionId || "新建会话"}</div>
-            <div>Engine {engineLabel(engine)}</div>
-            <div>Priority {priority || "null"}</div>
-            <div>Insert {insertMode ? "ON" : "OFF"}</div>
-            <div>Dual {dualMode && !batchMode && !editingTask ? "ON" : "OFF"}</div>
-            <div>Workspace {workspacePath || "none"}</div>
-            <div>Files {contextFiles.length}</div>
-          </div>
-        </div>
-
-        <div className="rounded-[24px] border border-white/8 bg-slate-950/38 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-slate-100">Skills 注入</div>
-              <div className="text-xs text-slate-400">自动匹配 + 手动多选叠加（最多 4 个）。</div>
-            </div>
-            <Button size="sm" variant="ghost" type="button" loading={skillSettingsPending} onClick={onRefreshSkills}>
-              刷新技能
-            </Button>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                  <div className="mb-2 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
+                    已附加文件
+                  </div>
+                  {contextFiles.length ? (
+                    <div className="space-y-2">
+                      {contextFiles.map((filePath) => (
+                        <div
+                          key={filePath}
+                          className="flex items-start justify-between gap-2 rounded-xl bg-zinc-950 px-3 py-2 text-xs text-zinc-100"
+                        >
+                          <span className="break-all">{filePath}</span>
+                          <button
+                            type="button"
+                            className="rounded-full p-1 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"
+                            onClick={() =>
+                              onContextFilesChange(contextFiles.filter((item) => item !== filePath))
+                            }
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-zinc-400">尚未附加上下文文件</div>
+                  )}
+                </div>
+              </div>
+            </ContextShell>
           </div>
 
-          <div className="mb-3">
-            <Toggle
-              checked={settings.skillsEnabled}
-              onPressedChange={(next) => onUpdateSkillSettings({ skillsEnabled: next })}
-              label="启用 Skills"
-            />
-          </div>
-
-          {settings.skillsEnabled ? (
-            <>
-              <div className="mb-3 rounded-2xl border border-white/8 bg-white/4 p-3 text-xs text-slate-300">
-                <div>自动命中：{skillMatchPreview?.autoMatchedSkillIds.join(", ") || "无"}</div>
-                <div>手动叠加：{settings.manualSkillIds.join(", ") || "无"}</div>
-                <div>最终注入：{skillMatchPreview?.appliedSkillIds.join(", ") || "无"}</div>
+          <div className="space-y-4">
+            <ContextShell title="执行设置" caption="控制引擎、优先级和分发方式。">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div>
+                  <FieldLabel>目标引擎</FieldLabel>
+                  <select
+                    value={engine}
+                    disabled={!!editingTask}
+                    onChange={(event) => setEngine(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950/90 px-4 text-sm text-zinc-50 outline-none transition-all hover:border-zinc-600 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-600/40 disabled:cursor-not-allowed disabled:opacity-55"
+                  >
+                    {ENGINE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {engineLabel(option)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <FieldLabel>优先级</FieldLabel>
+                  <Input
+                    inputMode="numeric"
+                    value={priority}
+                    onChange={(event) => setPriority(event.target.value)}
+                    placeholder="默认 50"
+                  />
+                </div>
               </div>
 
-              <div className="mt-2">
-                <SkillList
-                  skills={skills}
-                  settings={settings}
-                  match={skillMatchPreview}
-                  pending={skillSettingsPending}
-                  onUpdate={onUpdateSkillSettings}
+              <div className="mt-3 grid gap-2">
+                <Toggle
+                  checked={batchMode}
+                  onPressedChange={(next) => {
+                    onBatchModeChange(next);
+                    if (next) {
+                      onDualModeChange(false);
+                    }
+                  }}
+                  disabled={!!editingTask}
+                  label="批量提交"
+                />
+                <Toggle
+                  checked={insertMode}
+                  onPressedChange={onInsertModeChange}
+                  label="插入队列"
+                />
+                <Toggle
+                  checked={dualMode}
+                  onPressedChange={onDualModeChange}
+                  disabled={batchMode || !!editingTask}
+                  label="双监督"
                 />
               </div>
-            </>
-          ) : null}
+            </ContextShell>
+
+            <ContextShell title="执行摘要" caption="提交前快速确认本次任务配置。">
+              <div className="grid gap-2 text-xs leading-6 text-zinc-300">
+                <div className="flex items-center justify-between gap-3">
+                  <span>会话</span>
+                  <span>{sessionId || "新会话"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>引擎</span>
+                  <span>{engineLabel(engine)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>优先级</span>
+                  <span>{priority || "null"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>插队模式</span>
+                  <span>{insertMode ? "开启" : "关闭"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>双监督</span>
+                  <span>{dualMode && !batchMode && !editingTask ? "开启" : "关闭"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>工作区</span>
+                  <span>{workspacePath ? "已绑定" : "无"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>文件</span>
+                  <span>{contextFiles.length}</span>
+                </div>
+              </div>
+            </ContextShell>
+
+            <ContextShell
+              title="技能"
+              caption="自动匹配和手动叠加到当前草稿的技能。"
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  type="button"
+                  loading={skillSettingsPending}
+                  onClick={onRefreshSkills}
+                >
+                  刷新技能
+                </Button>
+                <Badge tone="neutral">{skills.length} 个可用</Badge>
+              </div>
+
+              <div className="mb-3">
+                <Toggle
+                  checked={settings.skillsEnabled}
+                  onPressedChange={(next) => onUpdateSkillSettings({ skillsEnabled: next })}
+                  label="启用技能"
+                />
+              </div>
+
+              {settings.skillsEnabled ? (
+                <>
+                  <div className="mb-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 text-xs text-zinc-300">
+                    <div>自动匹配：{skillMatchPreview?.autoMatchedSkillIds.join(", ") || "无"}</div>
+                    <div>手动指定：{settings.manualSkillIds.join(", ") || "无"}</div>
+                    <div>最终应用：{skillMatchPreview?.appliedSkillIds.join(", ") || "无"}</div>
+                  </div>
+
+                  <SkillList
+                    skills={skills}
+                    settings={settings}
+                    match={skillMatchPreview}
+                    pending={skillSettingsPending}
+                    onUpdate={onUpdateSkillSettings}
+                  />
+                </>
+              ) : null}
+            </ContextShell>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -369,15 +450,15 @@ export function PromptComposer({
               取消编辑
             </Button>
           ) : (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-zinc-400">
               {batchMode
-                ? "批量提交会把每一行作为独立任务进入队列。"
-                : "单条任务会立即进入调度，并通过事件流回传进度。"}
+                ? "每一行都会作为独立任务提交到队列。"
+                : "单任务模式会通过桌面事件实时回传执行进度。"}
             </div>
           )}
           <Button type="submit" variant="primary" loading={submitPending}>
             <Send className="size-4" />
-            {editingTask ? "保存任务" : batchMode ? "批量提交" : "发送 Prompt"}
+            {editingTask ? "保存任务" : batchMode ? "批量提交" : "发送提示词"}
           </Button>
         </div>
       </form>

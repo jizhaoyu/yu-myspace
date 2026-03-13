@@ -1,28 +1,29 @@
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui";
-import { Button, Input, Switch, Label, toast } from "@/components/ui";
+
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  FieldLabel,
+  Input,
+  Textarea,
+  Toggle,
+  toast,
+} from "@/components/ui";
 import { desktopApi } from "@/lib/desktop";
 import { type McpUpsertRequest } from "@/lib/types";
 
-/**
- * McpEditModal - a modal dialog for adding or editing an MCP server entry.
- *
- * Props:
- *   open: boolean – whether the modal is visible.
- *   onOpenChange: (open: boolean) => void – callback to control visibility.
- *   initialData?: McpUpsertRequest – optional existing data for edit mode.
- */
-export function McpEditModal({
-  open,
-  onOpenChange,
-  initialData,
-}: {
+type McpEditModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: McpUpsertRequest;
-}) {
-  const isEdit = !!initialData;
-  const [form, setForm] = useState<McpUpsertRequest>({
+};
+
+function createDefaultForm(): McpUpsertRequest {
+  return {
     name: "",
     spec: {
       transport: "",
@@ -36,234 +37,219 @@ export function McpEditModal({
     targetApps: [],
     description: "",
     tags: [],
-  });
+  };
+}
+
+export function McpEditModal({ open, onOpenChange, initialData }: McpEditModalProps) {
+  const isEdit = !!initialData;
+  const [form, setForm] = useState<McpUpsertRequest>(createDefaultForm);
 
   useEffect(() => {
-    if (initialData) {
-      setForm(initialData);
-    } else {
-      // reset to defaults when modal opens for creation
-      setForm({
-        name: "",
-        spec: {
-          transport: "",
-          command: "",
-          args: [],
-          url: "",
-          env: {},
-          timeoutMs: null,
-        },
-        enabled: true,
-        targetApps: [],
-        description: "",
-        tags: [],
-      });
-    }
+    setForm(initialData ?? createDefaultForm());
   }, [initialData, open]);
 
-  const handleChange = (field: keyof McpUpsertRequest, value: unknown) => {
+  function handleChange(field: keyof McpUpsertRequest, value: unknown) {
     setForm((prev) => ({ ...prev, [field]: value }));
-  };
+  }
 
-  const handleSpecChange = (
-    field: keyof McpUpsertRequest["spec"],
-    value: unknown,
-  ) => {
+  function handleSpecChange(field: keyof McpUpsertRequest["spec"], value: unknown) {
     setForm((prev) => ({
       ...prev,
       spec: { ...prev.spec, [field]: value },
     }));
-  };
+  }
 
-  const parseCommaSeparated = (value: string) =>
-    value.split(",").map((s) => s.trim()).filter(Boolean);
+  function parseCommaSeparated(value: string) {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
 
-  const parseEnv = (value: string) => {
+  function parseEnv(value: string) {
     const entries = value.split("\n");
-    const map: Record<string, string> = {};
+    const env: Record<string, string> = {};
+
     for (const line of entries) {
-      const [k, ...rest] = line.split("=");
-      if (k && rest.length) {
-        map[k.trim()] = rest.join("=").trim();
+      const [key, ...rest] = line.split("=");
+      if (key && rest.length) {
+        env[key.trim()] = rest.join("=").trim();
       }
     }
-    return map;
-  };
 
-  const submit = async () => {
-    // simple validation – required fields
+    return env;
+  }
+
+  async function submit() {
     if (!form.spec.transport) {
-      toast({ title: "Transport is required", variant: "destructive" });
+      toast({ title: "请选择传输方式", variant: "destructive" });
       return;
     }
     if (form.spec.transport === "stdio" && !form.spec.command) {
-      toast({ title: "Command required for stdio transport", variant: "destructive" });
+      toast({ title: "stdio 模式必须填写命令", variant: "destructive" });
       return;
     }
     if ((form.spec.transport === "http" || form.spec.transport === "sse") && !form.spec.url) {
-      toast({ title: "URL required for http/sse transport", variant: "destructive" });
+      toast({ title: "http / sse 模式必须填写 URL", variant: "destructive" });
       return;
     }
+
     try {
       await desktopApi.upsertMcpServer(form);
-      toast({ title: isEdit ? "MCP server updated" : "MCP server added" });
+      toast({ title: isEdit ? "MCP 服务已更新" : "MCP 服务已新增" });
       onOpenChange(false);
-    } catch (e) {
-      toast({ title: "Failed to upsert MCP server", description: String(e), variant: "destructive" });
+    } catch (error) {
+      toast({
+        title: "保存 MCP 服务失败",
+        description: String(error),
+        variant: "destructive",
+      });
     }
-  };
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="panel-surface border-zinc-800 bg-zinc-900/95 sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "编辑 MCP 服务器" : "新增 MCP 服务器"}</DialogTitle>
+          <DialogTitle className="text-zinc-50">{isEdit ? "编辑 MCP 服务" : "新增 MCP 服务"}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {/* ID */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="id" className="text-right">ID</Label>
-            <Input
-              id="id"
-              value={form.id ?? ""}
-              onChange={(e) => handleChange("id", e.target.value || undefined)}
-              placeholder="optional – will be generated from name if empty"
-              className="col-span-2"
-              disabled={isEdit}
-            />
+
+        <div className="grid gap-4 py-2">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <FieldLabel>ID</FieldLabel>
+              <Input
+                value={form.id ?? ""}
+                onChange={(event) => handleChange("id", event.target.value || undefined)}
+                placeholder="可选，不填则根据名称自动生成"
+                disabled={isEdit}
+              />
+            </div>
+
+            <div>
+              <FieldLabel>名称</FieldLabel>
+              <Input
+                value={form.name}
+                onChange={(event) => handleChange("name", event.target.value)}
+                placeholder="服务显示名称"
+              />
+            </div>
           </div>
-          {/* Name */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="name" className="text-right">名称</Label>
-            <Input
-              id="name"
-              value={form.name}
-              onChange={(e) => handleChange("name", e.target.value)}
-              placeholder="display name"
-              className="col-span-2"
-            />
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <FieldLabel>传输方式</FieldLabel>
+              <Input
+                value={form.spec.transport}
+                onChange={(event) => handleSpecChange("transport", event.target.value)}
+                placeholder="stdio / http / sse"
+              />
+            </div>
+
+            <div>
+              <FieldLabel>命令</FieldLabel>
+              <Input
+                value={form.spec.command ?? ""}
+                onChange={(event) => handleSpecChange("command", event.target.value || undefined)}
+                placeholder="stdio 模式必填"
+              />
+            </div>
           </div>
-          {/* Transport */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="transport" className="text-right">Transport</Label>
-            <Input
-              id="transport"
-              value={form.spec.transport}
-              onChange={(e) => handleSpecChange("transport", e.target.value)}
-              placeholder="stdio / http / sse"
-              className="col-span-2"
-            />
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <FieldLabel>参数</FieldLabel>
+              <Input
+                value={form.spec.args?.join(", ") ?? ""}
+                onChange={(event) => handleSpecChange("args", parseCommaSeparated(event.target.value))}
+                placeholder="逗号分隔"
+              />
+            </div>
+
+            <div>
+              <FieldLabel>URL</FieldLabel>
+              <Input
+                value={form.spec.url ?? ""}
+                onChange={(event) => handleSpecChange("url", event.target.value || undefined)}
+                placeholder="http / sse 模式必填"
+              />
+            </div>
           </div>
-          {/* Command */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="command" className="text-right">Command</Label>
-            <Input
-              id="command"
-              value={form.spec.command ?? ""}
-              onChange={(e) => handleSpecChange("command", e.target.value || undefined)}
-              placeholder="optional – required for stdio"
-              className="col-span-2"
-            />
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <FieldLabel>超时（毫秒）</FieldLabel>
+              <Input
+                type="number"
+                value={form.spec.timeoutMs ?? ""}
+                onChange={(event) =>
+                  handleSpecChange("timeoutMs", event.target.value ? Number(event.target.value) : null)
+                }
+                placeholder="可选"
+              />
+            </div>
+
+            <div>
+              <FieldLabel>目标应用</FieldLabel>
+              <Input
+                value={form.targetApps?.join(", ") ?? ""}
+                onChange={(event) => handleChange("targetApps", parseCommaSeparated(event.target.value))}
+                placeholder="逗号分隔，例如 opencode"
+              />
+            </div>
           </div>
-          {/* Args */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="args" className="text-right">Args</Label>
-            <Input
-              id="args"
-              value={form.spec.args?.join(", ") ?? ""}
-              onChange={(e) => handleSpecChange("args", parseCommaSeparated(e.target.value))}
-              placeholder="comma separated"
-              className="col-span-2"
-            />
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-zinc-100">启用状态</div>
+                <div className="mt-1 text-xs text-zinc-400">关闭后该 MCP 服务不会参与桌面端集成。</div>
+              </div>
+              <Toggle
+                checked={form.enabled ?? true}
+                onPressedChange={(checked) => handleChange("enabled", checked)}
+                label={form.enabled ? "已启用" : "已禁用"}
+              />
+            </div>
           </div>
-          {/* URL */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="url" className="text-right">URL</Label>
-            <Input
-              id="url"
-              value={form.spec.url ?? ""}
-              onChange={(e) => handleSpecChange("url", e.target.value || undefined)}
-              placeholder="required for http/sse"
-              className="col-span-2"
-            />
-          </div>
-          {/* Env */}
-          <div className="grid grid-cols-3 items-start gap-4">
-            <Label htmlFor="env" className="text-right">Env</Label>
-            <textarea
-              id="env"
-              rows={3}
+
+          <div>
+            <FieldLabel>环境变量</FieldLabel>
+            <Textarea
               value={Object.entries(form.spec.env ?? {})
-                .map(([k, v]) => `${k}=${v}`)
+                .map(([key, value]) => `${key}=${value}`)
                 .join("\n")}
-              onChange={(e) => handleSpecChange("env", parseEnv(e.target.value))}
-              placeholder="key=value per line"
-              className="col-span-2 w-full rounded-md border border-gray-300 p-2"
+              onChange={(event) => handleSpecChange("env", parseEnv(event.target.value))}
+              placeholder={"每行一个变量\n例如：API_KEY=xxx"}
+              className="min-h-[120px] rounded-2xl"
             />
           </div>
-          {/* Timeout */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="timeout" className="text-right">Timeout (ms)</Label>
-            <Input
-              id="timeout"
-              type="number"
-              value={form.spec.timeoutMs ?? ""}
-              onChange={(e) =>
-                handleSpecChange("timeoutMs", e.target.value ? Number(e.target.value) : null)
-              }
-              placeholder="optional"
-              className="col-span-2"
-            />
-          </div>
-          {/* Enabled */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="enabled" className="text-right">Enabled</Label>
-            <Switch
-              id="enabled"
-              checked={form.enabled ?? true}
-              onCheckedChange={(checked: boolean) => handleChange("enabled", checked)}
-              className="col-span-2"
-            />
-          </div>
-          {/* Target Apps */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="targetApps" className="text-right">Target Apps</Label>
-            <Input
-              id="targetApps"
-              value={form.targetApps?.join(", ") ?? ""}
-              onChange={(e) => handleChange("targetApps", parseCommaSeparated(e.target.value))}
-              placeholder="comma separated, e.g. opencode"
-              className="col-span-2"
-            />
-          </div>
-          {/* Description */}
-          <div className="grid grid-cols-3 items-start gap-4">
-            <Label htmlFor="description" className="text-right">Description</Label>
-            <textarea
-              id="description"
-              rows={2}
+
+          <div>
+            <FieldLabel>描述</FieldLabel>
+            <Textarea
               value={form.description ?? ""}
-              onChange={(e) => handleChange("description", e.target.value)}
-              className="col-span-2 w-full rounded-md border border-gray-300 p-2"
+              onChange={(event) => handleChange("description", event.target.value)}
+              placeholder="说明这个服务的用途、连接方式或适用场景"
+              className="min-h-[110px] rounded-2xl"
             />
           </div>
-          {/* Tags */}
-          <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor="tags" className="text-right">Tags</Label>
+
+          <div>
+            <FieldLabel>标签</FieldLabel>
             <Input
-              id="tags"
               value={form.tags?.join(", ") ?? ""}
-              onChange={(e) => handleChange("tags", parseCommaSeparated(e.target.value))}
-              placeholder="comma separated"
-              className="col-span-2"
+              onChange={(event) => handleChange("tags", parseCommaSeparated(event.target.value))}
+              placeholder="逗号分隔"
             />
           </div>
         </div>
+
         <DialogFooter>
-          <Button onClick={submit}>{isEdit ? "更新" : "新增"}</Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             取消
           </Button>
+          <Button onClick={() => void submit()}>{isEdit ? "保存修改" : "新增服务"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

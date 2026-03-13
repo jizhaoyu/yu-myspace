@@ -5,6 +5,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -20,10 +21,12 @@ public class SkillRegistry {
     private static final Logger logger = LoggerFactory.getLogger(SkillRegistry.class);
 
     private final SkillParser skillParser;
+    private final CodexExternalConfigService codexExternalConfigService;
     private final AtomicReference<List<SkillDefinition>> cache = new AtomicReference<>(List.of());
 
-    public SkillRegistry(SkillParser skillParser) {
+    public SkillRegistry(SkillParser skillParser, CodexExternalConfigService codexExternalConfigService) {
         this.skillParser = skillParser;
+        this.codexExternalConfigService = codexExternalConfigService;
         refresh();
     }
 
@@ -39,8 +42,26 @@ public class SkillRegistry {
     }
 
     public List<SkillDefinition> refresh() {
-        Path root = Paths.get("skills");
-        List<SkillDefinition> loaded = new ArrayList<>();
+        Path projectRoot = Paths.get("skills");
+        Path globalRoot = codexExternalConfigService.globalSkillsRoot();
+        LinkedHashMap<String, SkillDefinition> byId = new LinkedHashMap<>();
+
+        loadSkillRoot(globalRoot, byId);
+        loadSkillRoot(projectRoot, byId);
+
+        List<SkillDefinition> loaded = new ArrayList<>(byId.values());
+        List<SkillDefinition> immutable = Collections.unmodifiableList(loaded);
+        cache.set(immutable);
+        logger.info(
+            "skills refreshed count={} projectRoot={} globalRoot={}",
+            immutable.size(),
+            projectRoot.toAbsolutePath().normalize(),
+            globalRoot
+        );
+        return immutable;
+    }
+
+    private void loadSkillRoot(Path root, LinkedHashMap<String, SkillDefinition> byId) {
         try (var stream = java.nio.file.Files.walk(root)) {
             stream
                 .filter(path -> java.nio.file.Files.isRegularFile(path))
@@ -48,17 +69,13 @@ public class SkillRegistry {
                 .sorted(Comparator.comparing(path -> path.toString().toLowerCase(Locale.ROOT)))
                 .forEach(path -> {
                     try {
-                        loaded.add(skillParser.parse(path));
+                        SkillDefinition definition = skillParser.parse(path);
+                        byId.put(definition.id().toLowerCase(Locale.ROOT), definition);
                     } catch (Exception ignored) {
                     }
                 });
         } catch (Exception ignored) {
         }
-
-        List<SkillDefinition> immutable = Collections.unmodifiableList(loaded);
-        cache.set(immutable);
-        logger.info("skills refreshed count={} root={}", immutable.size(), root.toAbsolutePath().normalize());
-        return immutable;
     }
 
     public SkillDefinition findById(String skillId) {

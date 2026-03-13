@@ -1,10 +1,14 @@
 package com.fangyu.code.domain.service;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.io.IOException;
 import java.time.Clock;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -14,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -172,7 +177,7 @@ public class McpRegistryService {
         }
 
         try {
-            Map<String, Object> raw = objectMapper.readValue(Files.readString(opencodePath, StandardCharsets.UTF_8), new TypeReference<>() {});
+            Map<String, Object> raw = readOpenCodeConfig();
             Object mcpServersRaw = raw.get("mcpServers");
             if (!(mcpServersRaw instanceof Map<?, ?> serversMap)) {
                 return snapshot();
@@ -194,14 +199,22 @@ public class McpRegistryService {
                 McpServerSpec spec = mapToSpec(specMap);
                 List<String> targetApps = List.of(TARGET_OPENCODE);
                 McpServerEntry existing = byId.get(id.toLowerCase(Locale.ROOT));
+
+                // Merge strategy: keep registry metadata + enabled flag, but update spec from OpenCode.
+                boolean enabled = existing == null ? true : existing.enabled();
+                String name = existing == null ? id : existing.name();
+                String description = existing == null ? "" : existing.description();
+                List<String> tags = existing == null ? List.of() : existing.tags();
+                List<String> mergedTargetApps = mergeTargetApps(existing == null ? List.of() : existing.targetApps(), targetApps);
+
                 McpServerEntry merged = new McpServerEntry(
                     id,
-                    existing == null ? id : existing.name(),
+                    name,
                     sanitizeSpec(spec),
-                    true,
-                    mergeTargetApps(existing == null ? List.of() : existing.targetApps(), targetApps),
-                    existing == null ? "" : existing.description(),
-                    existing == null ? List.of() : existing.tags(),
+                    enabled,
+                    mergedTargetApps,
+                    description,
+                    tags,
                     now
                 );
                 byId.put(id.toLowerCase(Locale.ROOT), merged);
@@ -338,18 +351,23 @@ public class McpRegistryService {
     }
 
     private RegistryDocument readRegistry() {
-        Path path = registryPath();
+        return readJson(registryPath(), REGISTRY_DOC_TYPE, new RegistryDocument(List.of(), 0L));
+    }
+
+    private Map<String, Object> readOpenCodeConfig() {
+        return readJson(opencodeConfigPath(), new TypeReference<>() {}, Map.of());
+    }
+
+    private <T> T readJson(Path path, TypeReference<T> type, T fallback) {
         if (!Files.exists(path)) {
-            return new RegistryDocument(List.of(), 0L);
+            return fallback;
         }
+
         try {
-            RegistryDocument document = objectMapper.readValue(Files.readString(path, StandardCharsets.UTF_8), REGISTRY_DOC_TYPE);
-            if (document == null || document.servers() == null) {
-                return new RegistryDocument(List.of(), 0L);
-            }
-            return document;
+            T parsed = withRetry(() -> objectMapper.readValue(Files.readString(path, StandardCharsets.UTF_8), type));
+            return parsed == null ? fallback : parsed;
         } catch (Exception exception) {
-            throw new IllegalStateException("Failed to read MCP registry", exception);
+            throw new IllegalStateException("Failed to read MCP file: " + path, exception);
         }
     }
 
@@ -362,10 +380,66 @@ public class McpRegistryService {
             if (file.getParent() != null) {
                 Files.createDirectories(file.getParent());
             }
-            Files.writeString(file, objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(content), StandardCharsets.UTF_8);
+
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(content);
+            atomicWriteUtf8(file, json);
         } catch (Exception exception) {
             throw new IllegalStateException("Failed to write MCP file: " + file, exception);
         }
+    }
+
+    private void atomicWriteUtf8(Path target, String content) throws Exception {
+        Path parent = target.getParent();
+        if (parent == null) {
+            throw new IllegalStateException("MCP file parent directory is null: " + target);
+        }
+
+        Path tmp = parent.resolve(target.getFileName() + "." + UUID.randomUUID() + ".tmp");
+        try {
+            Files.writeString(tmp, content, StandardCharsets.UTF_8);
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (Exception ignored) {
+                // best effort
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
+    }
+
+    private <T> T withRetry(ThrowingSupplier<T> supplier) throws Exception {
+        int attempts = 0;
+        long backoffMs = 100L;
+        while (true) {
+            attempts++;
+            try {
+                return supplier.get();
+            } catch (IOException exception) {
+                if (attempts >= 3) {
+                    throw exception;
+                }
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw exception;
+                }
+                backoffMs = Math.min(backoffMs * 2L + 50L, 800L);
+            }
+        }
+    }
+
+    Path opencodeConfigPathForWatcher() {
+        return opencodeConfigPath();
     }
 
     private Path registryPath() {

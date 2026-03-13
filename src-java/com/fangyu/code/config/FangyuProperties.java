@@ -77,6 +77,7 @@ public class FangyuProperties {
     }
 
     public static class Desktop {
+        private boolean enabled = true;
         @NotBlank
         private String title = "Fangyu Code";
         @NotBlank
@@ -87,6 +88,14 @@ public class FangyuProperties {
         private String devUrl = "http://localhost:5173";
         @NotBlank
         private String prodAssets = "/web";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
 
         public String getTitle() {
             return title;
@@ -241,6 +250,9 @@ public class FangyuProperties {
     public static class Mcp {
         private String registryPath = "";
         private String opencodeConfigPath = "";
+        private boolean autoImportEnabled = false;
+        @Min(250)
+        private int autoImportIntervalMs = 2000;
 
         public String getRegistryPath() {
             return registryPath;
@@ -256,6 +268,22 @@ public class FangyuProperties {
 
         public void setOpencodeConfigPath(String opencodeConfigPath) {
             this.opencodeConfigPath = opencodeConfigPath;
+        }
+
+        public boolean isAutoImportEnabled() {
+            return autoImportEnabled;
+        }
+
+        public void setAutoImportEnabled(boolean autoImportEnabled) {
+            this.autoImportEnabled = autoImportEnabled;
+        }
+
+        public int getAutoImportIntervalMs() {
+            return autoImportIntervalMs;
+        }
+
+        public void setAutoImportIntervalMs(int autoImportIntervalMs) {
+            this.autoImportIntervalMs = autoImportIntervalMs;
         }
     }
 

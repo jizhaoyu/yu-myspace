@@ -103,6 +103,10 @@
             <resource>
                 <directory>src/main/resources</directory>
             </resource>
+            <resource>
+                <directory>dist</directory>
+                <targetPath>dist</targetPath>
+            </resource>
         </resources>
         <plugins>
             <plugin>

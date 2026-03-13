@@ -54,33 +54,3 @@ CREATE TABLE IF NOT EXISTS app_setting (
     json_value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
-
-CREATE VIRTUAL TABLE IF NOT EXISTS prompt_message_fts
-USING fts5(
-    message_id UNINDEXED,
-    session_id UNINDEXED,
-    task_id UNINDEXED,
-    role,
-    content
-);
-
-CREATE TRIGGER IF NOT EXISTS trg_prompt_message_ai
-AFTER INSERT ON prompt_message
-BEGIN
-    INSERT INTO prompt_message_fts(message_id, session_id, task_id, role, content)
-    VALUES (new.id, new.session_id, new.task_id, new.role, new.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_prompt_message_ad
-AFTER DELETE ON prompt_message
-BEGIN
-    DELETE FROM prompt_message_fts WHERE message_id = old.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_prompt_message_au
-AFTER UPDATE ON prompt_message
-BEGIN
-    DELETE FROM prompt_message_fts WHERE message_id = old.id;
-    INSERT INTO prompt_message_fts(message_id, session_id, task_id, role, content)
-    VALUES (new.id, new.session_id, new.task_id, new.role, new.content);
-END;

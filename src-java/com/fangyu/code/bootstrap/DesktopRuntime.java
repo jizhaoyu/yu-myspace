@@ -13,17 +13,20 @@ import build.krema.core.Krema;
 public class DesktopRuntime {
 
     private final FangyuProperties properties;
+    private final KremaNativeBootstrap kremaNativeBootstrap;
     private final DesktopEventPublisher eventPublisher;
     private final PromptCommand promptCommand;
     private final EngineConfigurationService engineConfigurationService;
 
     public DesktopRuntime(
         FangyuProperties properties,
+        KremaNativeBootstrap kremaNativeBootstrap,
         DesktopEventPublisher eventPublisher,
         PromptCommand promptCommand,
         EngineConfigurationService engineConfigurationService
     ) {
         this.properties = properties;
+        this.kremaNativeBootstrap = kremaNativeBootstrap;
         this.eventPublisher = eventPublisher;
         this.promptCommand = promptCommand;
         this.engineConfigurationService = engineConfigurationService;
@@ -32,6 +35,7 @@ public class DesktopRuntime {
     public void run(String[] args) {
         boolean devMode = isDevMode(args);
         printStartupDiagnostics(devMode);
+        kremaNativeBootstrap.prepare();
 
         Krema app = Krema.app()
             .title(properties.getDesktop().getTitle())

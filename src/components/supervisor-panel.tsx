@@ -6,11 +6,7 @@ import {
   type SupervisorSnapshot,
   type TaskProgressEvent,
 } from "@/lib/types";
-import {
-  clampPercent,
-  formatRelative,
-  snippet,
-} from "@/lib/utils";
+import { clampPercent, formatRelative, snippet } from "@/lib/utils";
 
 type SupervisorPanelProps = {
   supervisors: SupervisorSnapshot[];
@@ -38,9 +34,9 @@ export function SupervisorPanel({
 
   return (
     <Panel
-      title="双路监督"
-      description="观察主执行体与审查体的协同状态，及时识别降级和策略偏移。"
-      actions={<Badge tone="info">Supervisor</Badge>}
+      title="监督"
+      description="跟踪主执行通道与复核通道，识别降级状态，并查看互相影响。"
+      actions={<Badge tone="info">双通道</Badge>}
       className="h-full"
     >
       {ordered.length ? (
@@ -54,9 +50,7 @@ export function SupervisorPanel({
               <article
                 key={item.taskId}
                 className={`rounded-[24px] border p-4 ${
-                  degraded
-                    ? "border-rose-400/22 bg-rose-500/8"
-                    : "border-white/8 bg-slate-950/36"
+                  degraded ? "border-rose-500/24 bg-rose-500/10" : "border-zinc-800 bg-zinc-950/72"
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -67,57 +61,61 @@ export function SupervisorPanel({
                       ) : (
                         <ShieldCheck className="size-4 text-emerald-300" />
                       )}
-                      <span className="text-sm font-medium text-white">
-                        {task ? snippet(task.prompt, 72) : item.taskId}
+                      <span className="text-sm font-medium text-zinc-50">
+                        {task ? snippet(task.prompt, 76) : item.taskId}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge tone={degraded ? "danger" : "success"}>
-                        {degraded ? "Degraded" : "Healthy"}
+                        {degraded ? "已降级" : "健康"}
                       </Badge>
                       <Badge tone="neutral">{item.primaryStatus}</Badge>
                       <Badge tone="neutral">{item.reviewerStatus}</Badge>
                     </div>
                   </div>
-                  <div className="text-xs text-slate-400">
-                    {formatRelative(item.updatedAt)}
-                  </div>
+                  <div className="text-xs text-zinc-500">{formatRelative(item.updatedAt)}</div>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
-                    <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
-                      <span>Primary</span>
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                    <div className="mb-2 flex items-center justify-between text-xs text-zinc-400">
+                      <span>主执行</span>
                       <span>{clampPercent(item.primaryProgress).toFixed(0)}%</span>
                     </div>
-                    <ProgressBar value={clampPercent(item.primaryProgress)} />
-                    <p className="mt-2 text-xs leading-5 text-slate-300">
-                      {item.primaryRecommendation || "主执行体正在持续推进。"}
+                    <ProgressBar
+                      className="bg-zinc-800"
+                      indicatorClassName="bg-[linear-gradient(90deg,rgba(56,189,248,0.92),rgba(96,165,250,0.92))]"
+                      value={clampPercent(item.primaryProgress)}
+                    />
+                    <p className="mt-2 text-xs leading-6 text-zinc-300">
+                      {item.primaryRecommendation || "主执行通道当前运行正常。"}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-3">
-                    <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
-                      <span>Reviewer</span>
+
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+                    <div className="mb-2 flex items-center justify-between text-xs text-zinc-400">
+                      <span>复核</span>
                       <span>{clampPercent(item.reviewerProgress).toFixed(0)}%</span>
                     </div>
                     <ProgressBar
+                      className="bg-zinc-800"
                       value={clampPercent(item.reviewerProgress)}
-                      indicatorClassName="bg-[linear-gradient(90deg,rgba(52,211,153,0.82),rgba(56,189,248,0.95))]"
+                      indicatorClassName="bg-[linear-gradient(90deg,rgba(16,185,129,0.92),rgba(56,189,248,0.92))]"
                     />
-                    <p className="mt-2 text-xs leading-5 text-slate-300">
-                      {item.reviewerRecommendation || "审查体还未给出额外建议。"}
+                    <p className="mt-2 text-xs leading-6 text-zinc-300">
+                      {item.reviewerRecommendation || "复核通道暂未产生额外建议。"}
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-3 grid gap-3 rounded-2xl border border-white/8 bg-slate-900/45 p-3 text-xs text-slate-300">
-                  <div className="flex items-center gap-2 font-medium text-slate-200">
-                    <SplitSquareVertical className="size-3.5 text-sky-300" />
-                    Peer Impact
+                <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 text-xs text-zinc-300">
+                  <div className="mb-2 flex items-center gap-2 font-medium text-zinc-200">
+                    <SplitSquareVertical className="size-3.5 text-sky-400" />
+                    相互影响
                   </div>
-                  <div>{progressEvent?.peerImpact || item.peerImpact || "暂无跨任务影响。"} </div>
-                  <div className="text-slate-400">
-                    推荐动作 {progressEvent?.recommendedAction || "继续观察"}
+                  <div>{progressEvent?.peerImpact || item.peerImpact || "当前没有跨任务影响反馈。"}</div>
+                  <div className="mt-2 text-zinc-400">
+                    建议动作 {progressEvent?.recommendedAction || "继续观察"}
                   </div>
                 </div>
               </article>
@@ -125,8 +123,8 @@ export function SupervisorPanel({
           })}
         </div>
       ) : (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/3 px-5 py-10 text-sm text-slate-400">
-          当前没有双路监督任务。打开 Composer 的“双路监督”开关后，新任务会在这里显示互监状态。
+        <div className="rounded-[24px] border border-dashed border-zinc-800 bg-zinc-950/60 px-5 py-10 text-sm text-zinc-400">
+          还没有双监督任务。可在“编排”工作区开启双监督后回到这里查看。
         </div>
       )}
     </Panel>

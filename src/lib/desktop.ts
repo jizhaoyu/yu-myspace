@@ -94,6 +94,7 @@ type DesktopEventMap = {
   "budget:updated": BudgetSnapshot;
   "settings:updated": AppSettings;
   "history:updated": PromptMessageView;
+  "mcp:updated": McpRegistrySnapshot;
 };
 
 type Unsubscribe = () => void;
@@ -242,4 +243,6 @@ export const desktopEvents = {
     on("settings:updated", handler),
   onHistoryUpdated: (handler: (payload: PromptMessageView) => void) =>
     on("history:updated", handler),
+  onMcpUpdated: (handler: (payload: McpRegistrySnapshot) => void) =>
+    on("mcp:updated", handler),
 };

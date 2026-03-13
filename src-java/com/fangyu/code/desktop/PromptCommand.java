@@ -255,27 +255,37 @@ public class PromptCommand {
 
     @KremaCommand
     public McpRegistrySnapshot upsertMcpServer(McpUpsertRequest request) {
-        return mcpRegistryService.upsert(request);
+        McpRegistrySnapshot snapshot = mcpRegistryService.upsert(request);
+        eventPublisher.emit(DesktopEventPublisher.MCP_UPDATED, snapshot);
+        return snapshot;
     }
 
     @KremaCommand
     public McpRegistrySnapshot deleteMcpServer(String id) {
-        return mcpRegistryService.delete(id);
+        McpRegistrySnapshot snapshot = mcpRegistryService.delete(id);
+        eventPublisher.emit(DesktopEventPublisher.MCP_UPDATED, snapshot);
+        return snapshot;
     }
 
     @KremaCommand
     public McpRegistrySnapshot setMcpServerEnabled(String id, boolean enabled) {
-        return mcpRegistryService.setEnabled(id, enabled);
+        McpRegistrySnapshot snapshot = mcpRegistryService.setEnabled(id, enabled);
+        eventPublisher.emit(DesktopEventPublisher.MCP_UPDATED, snapshot);
+        return snapshot;
     }
 
     @KremaCommand
     public McpRegistrySnapshot syncMcpToOpenCode() {
-        return mcpRegistryService.syncToOpenCode();
+        McpRegistrySnapshot snapshot = mcpRegistryService.syncToOpenCode();
+        eventPublisher.emit(DesktopEventPublisher.MCP_UPDATED, snapshot);
+        return snapshot;
     }
 
     @KremaCommand
     public McpRegistrySnapshot importMcpFromOpenCode() {
-        return mcpRegistryService.importFromOpenCode();
+        McpRegistrySnapshot snapshot = mcpRegistryService.importFromOpenCode();
+        eventPublisher.emit(DesktopEventPublisher.MCP_UPDATED, snapshot);
+        return snapshot;
     }
 
     private List<String> normalizeSkillIds(List<String> skillIds) {

@@ -47,6 +47,16 @@ class DatabaseMigrationServiceTest {
                 updated_at INTEGER NOT NULL
             )
             """).update();
+        jdbcClient.sql("""
+            CREATE TABLE prompt_message (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                task_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+            """).update();
     }
 
     @Test
@@ -94,5 +104,33 @@ class DatabaseMigrationServiceTest {
             .list();
 
         assertThat(columns).contains("workspace_path", "context_files_json");
+    }
+
+    @Test
+    void migrateShouldCreatePromptMessageSearchObjectsAndBackfillData() {
+        jdbcClient.sql("""
+            INSERT INTO prompt_message(id, session_id, task_id, role, content, created_at)
+            VALUES ('m1', 's1', 't1', 'user', 'hello world', 1)
+            """).update();
+
+        migrationService.migrate();
+
+        var tables = jdbcClient.sql("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'prompt_message_fts'")
+            .query(String.class)
+            .list();
+        var triggers = jdbcClient.sql("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_prompt_message_%'")
+            .query(String.class)
+            .list();
+        var indexedContent = jdbcClient.sql("SELECT content FROM prompt_message_fts WHERE message_id = 'm1'")
+            .query(String.class)
+            .single();
+
+        assertThat(tables).containsExactly("prompt_message_fts");
+        assertThat(triggers).containsExactlyInAnyOrder(
+            "trg_prompt_message_ai",
+            "trg_prompt_message_ad",
+            "trg_prompt_message_au"
+        );
+        assertThat(indexedContent).isEqualTo("hello world");
     }
 }

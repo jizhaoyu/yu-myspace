@@ -20,17 +20,20 @@ public class SettingsService {
     private final ObjectMapper objectMapper;
     private final FangyuProperties properties;
     private final Clock clock;
+    private final CodexExternalConfigService codexExternalConfigService;
 
     public SettingsService(
         JdbcClient jdbcClient,
         ObjectMapper objectMapper,
         FangyuProperties properties,
-        Clock clock
+        Clock clock,
+        CodexExternalConfigService codexExternalConfigService
     ) {
         this.jdbcClient = jdbcClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.clock = clock;
+        this.codexExternalConfigService = codexExternalConfigService;
     }
 
     public AppSettings load() {
@@ -87,18 +90,23 @@ public class SettingsService {
     }
 
     public AppSettings defaults() {
+        CodexExternalConfigService.ExternalEngineDefaults external = codexExternalConfigService.loadEngineDefaults();
         return new AppSettings(
             "system",
             properties.getEngines().getDefaultEngine().name(),
             false,
             properties.getBudgets().getSessionUsd(),
             properties.getBudgets().getWeeklyUsd(),
-            properties.getEngines().getCodex().getEndpoint(),
-            properties.getEngines().getCodex().getModel(),
-            properties.getEngines().getCodex().getApiKey(),
+            firstNonBlank(external.endpoint(), properties.getEngines().getCodex().getEndpoint()),
+            firstNonBlank(external.model(), properties.getEngines().getCodex().getModel()),
+            firstNonBlank(external.apiKey(), properties.getEngines().getCodex().getApiKey()),
             true,
             List.of(),
             List.of()
         );
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return primary == null || primary.isBlank() ? fallback : primary;
     }
 }

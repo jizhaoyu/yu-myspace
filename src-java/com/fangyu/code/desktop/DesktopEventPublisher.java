@@ -16,6 +16,7 @@ public class DesktopEventPublisher {
     public static final String BUDGET_UPDATED = "budget:updated";
     public static final String SETTINGS_UPDATED = "settings:updated";
     public static final String HISTORY_UPDATED = "history:updated";
+    public static final String MCP_UPDATED = "mcp:updated";
 
     private final AtomicReference<EventEmitter> emitterRef = new AtomicReference<>();
 
